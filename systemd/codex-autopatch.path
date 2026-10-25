@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for updates to Codex (/usr/lib/chatgpt)
+PartOf=graphical-session.target
+
+[Path]
+PathModified=/usr/lib/chatgpt/resources/app.asar
+PathModified=/usr/lib/chatgpt/ChatGPT
+Unit=codex-autopatch.service
+
+[Install]
+WantedBy=default.target

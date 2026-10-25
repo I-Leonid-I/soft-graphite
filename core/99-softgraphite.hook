@@ -1,0 +1,12 @@
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = kwin
+Target = plasma-workspace
+Target = libplasma
+Target = qt6-base
+
+[Action]
+Description = Rebuilding Soft Graphite native plugins for updated KWin/Plasma...
+When = PostTransaction
+Exec = /usr/bin/su - @USER@ -c "/usr/bin/python3 @HOME@/.local/share/soft-graphite/rebuild-all.py --no-reload"

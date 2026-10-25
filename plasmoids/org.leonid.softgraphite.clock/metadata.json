@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.leonid.softgraphite.clock",
+    "Name": "Soft Graphite Clock",
+    "Version": "1.1",
+    "License": "GPL-2.0-or-later",
+    "Icon": "clock",
+    "Category": "Date and Time"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

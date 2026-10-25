@@ -1,0 +1,6 @@
+{
+  "window.titleBarStyle": "native",
+  "window.menuStyle": "native",
+  "window.customTitleBarVisibility": "never",
+  "window.menuBarVisibility": "classic"
+}

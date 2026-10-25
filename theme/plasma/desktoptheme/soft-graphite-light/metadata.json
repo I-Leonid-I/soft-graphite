@@ -1,0 +1,10 @@
+{
+  "KPlugin": {
+    "Id": "soft-graphite-light",
+    "Name": "Soft Graphite Light",
+    "Description": "Soft Graphite surfaces; includes Breeze SVG elements by KDE",
+    "Version": "1.0",
+    "License": "LGPL"
+  },
+  "X-Plasma-API": "5.0"
+}

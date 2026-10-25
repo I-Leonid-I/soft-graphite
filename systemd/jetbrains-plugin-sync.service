@@ -1,0 +1,7 @@
+[Unit]
+Description=Auto-link Global Menu plugin into all JetBrains IDEs
+Documentation=file://%h/.local/share/soft-graphite/sync-jetbrains-plugins.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/soft-graphite/sync-jetbrains-plugins.py

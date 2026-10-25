@@ -1,0 +1,7 @@
+[Unit]
+Description=Auto-reapply native window frame patch to Claude Desktop
+Documentation=file://%h/.local/share/soft-graphite/patch-claude-frame.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/soft-graphite/rebuild-claude.py --if-stale

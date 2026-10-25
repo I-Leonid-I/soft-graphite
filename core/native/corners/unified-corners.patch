@@ -1,0 +1,109 @@
+diff --git a/src/Shader.cpp b/src/Shader.cpp
+index 483229e..ab00ab6 100644
+--- a/src/Shader.cpp
++++ b/src/Shader.cpp
+@@ -76,6 +76,8 @@ ShapeCorners::Shader::Shader()
+     m_shader_windowSize             = m_shader->uniformLocation("windowSize");
+     m_shader_windowExpandedSize     = m_shader->uniformLocation("windowExpandedSize");
+     m_shader_windowTopLeft          = m_shader->uniformLocation("windowTopLeft");
++    m_shader_clientRect             = m_shader->uniformLocation("clientRect");
++    m_shader_clientCornerLimit      = m_shader->uniformLocation("clientCornerLimit");
+     m_shader_yInverted              = m_shader->uniformLocation("yInverted");
+     m_shader_usesNativeShadows      = m_shader->uniformLocation("usesNativeShadows");
+     m_shader_shadowColor            = m_shader->uniformLocation("shadowColor");
+@@ -135,6 +137,16 @@ void ShapeCorners::Shader::Bind(const Window &window, const double scale) const
+     m_shader->setUniform(m_shader_windowSize, toVector2D(frameGeometry.size()));
+     m_shader->setUniform(m_shader_windowExpandedSize, toVector2D(expandedGeometry.size()));
+     m_shader->setUniform(m_shader_windowTopLeft, frameOffset);
++    QVector4D clientRect;
++    if (window.w->decoration() && !window.w->isFullScreen()) {
++        const auto client = KWin::snapToPixels(window.w->clientGeometry(), scale) * scale;
++        const auto offset = client.topLeft() - frameGeometry.topLeft();
++        if (offset.y() >= 8.0 * scale && client.width() >= 96.0 * scale) {
++            clientRect = QVector4D(offset.x(), offset.y(), client.width(), client.height());
++        }
++    }
++    m_shader->setUniform(m_shader_clientRect, clientRect);
++    m_shader->setUniform(m_shader_clientCornerLimit, static_cast<float>(24.0 * scale));
+     m_shader->setUniform(m_shader_yInverted, static_cast<int>(kYInverted));
+     m_shader->setUniform(m_shader_usesNativeShadows, static_cast<int>(Config::useNativeDecorationShadows()));
+     m_shader->setUniform(m_shader_useSquircleShape, static_cast<int>(Config::useSquircleShape()));
+diff --git a/src/Shader.h b/src/Shader.h
+index a89fb6a..cb32165 100644
+--- a/src/Shader.h
++++ b/src/Shader.h
+@@ -97,6 +97,11 @@ namespace ShapeCorners
+          */
+         int m_shader_windowTopLeft = 0;
+ 
++        // Rectangle of the client inside a server-decorated frame (device pixels).
++        // Zero extent disables the repair for undecorated/fullscreen windows.
++        int m_shader_clientRect = 0;
++        int m_shader_clientCornerLimit = 0;
++
+         /**
+          * \brief Reference to `uniform bool yInverted;`
+          *        Whether `texcoord0.y` grows downward from the top edge of the offscreen texture
+diff --git a/src/metadata.json b/src/metadata.json
+index ad2d369..5bf0b4d 100644
+--- a/src/metadata.json
++++ b/src/metadata.json
+@@ -11,12 +11,12 @@
+             }
+         ],
+         "Category": "Appearance",
+-        "Description": "An effect that shapes/rounds corners of windows with adjusted outlines and shadows.",
+-        "Description[ru]": "Эффект, который формирует/скругляет углы окон с помощью настроенных контуров и теней.",
+-        "EnabledByDefault": true,
++        "Description": "Shared window rounding with transparent client-corner repair below server titlebars.",
++        "Description[ru]": "Единое скругление окон и устранение прозрачных вырезов под системным заголовком.",
++        "EnabledByDefault": false,
+         "License": "GPL",
+-        "Name": "Rounded Corners (formerly ShapeCorners)",
+-        "Name[ru]": "Закругленные углы",
++        "Name": "Soft Graphite — Unified Corners",
++        "Name[ru]": "Soft Graphite — единые углы",
+         "ServiceTypes": [
+             "KWin/Effect"
+         ],
+diff --git a/src/shaders/shapecorners.glsl b/src/shaders/shapecorners.glsl
+index 1f44c9c..e00f140 100644
+--- a/src/shaders/shapecorners.glsl
++++ b/src/shaders/shapecorners.glsl
+@@ -1,5 +1,28 @@
+ #include "shapecorners_shadows.glsl"
+ 
++uniform vec4 clientRect;
++uniform float clientCornerLimit;
++
++// A client can keep its own transparent rounded cut-outs after KWin adds a
++// server titlebar. Seal only those cut-outs immediately below the titlebar.
++// Sample the client's own edge colour; never replace opaque application pixels.
++// This runs in the existing pass, with no readback, timer or application list.
++vec4 sealClientCorners(vec2 pixel, vec4 tex)
++{
++    if (clientRect.z <= 0.0 || tex.a >= 0.999) return tex;
++    vec2 p = pixel - clientRect.xy;
++    float side = min(p.x, clientRect.z - p.x);
++    if (p.y < 0.0 || p.y >= clientCornerLimit || side < 0.0 || side >= clientCornerLimit) return tex;
++
++    float insetX = p.x < clientRect.z * 0.5 ? clientCornerLimit + 0.5 : clientRect.z - clientCornerLimit - 0.5;
++    vec4 horizontal = texture2D(sampler, pixel_to_tex(clientRect.xy + vec2(insetX, p.y)));
++    vec4 vertical = texture2D(sampler, pixel_to_tex(clientRect.xy + vec2(p.x, clientCornerLimit + 0.5)));
++    // Keep genuinely translucent clients translucent. Both neighbouring edges
++    // must be opaque before treating a missing corner as a CSD cut-out.
++    if (horizontal.a < 0.995 || vertical.a < 0.995) return tex;
++    return vec4(tex.rgb + vertical.rgb * (1.0 - tex.a), 1.0);
++}
++
+ bool is_within(float point, float a, float b) { return (point >= min(a, b) && point <= max(a, b)); }
+ bool is_within(vec2 point, vec2 corner_a, vec2 corner_b)
+ {
+@@ -158,6 +181,7 @@ vec4 shapeCorner(vec2 coord0, vec4 tex, vec2 start, float angle, vec4 coord_shad
+ 
+ vec4 run(vec2 texcoord0, vec4 tex)
+ {
++    tex = sealClientCorners(tex_to_pixel(texcoord0), tex);
+     if (tex.a == 0.0) {
+         return tex;
+     }

@@ -1,0 +1,23 @@
+{
+  "KPackageStructure": "aurorae",
+  "KPlugin": {
+    "Authors": [
+      {
+        "Email": "vinceliuice@hotmail.com",
+        "Name": "Vince Liuice"
+      }
+    ],
+    "Category": "Plasma 6 Window Decorations",
+    "ServiceTypes": [
+      "aurorae"
+    ],
+    "EnabledByDefault": true,
+    "Name": "Мягкий графит — светлая рамка",
+    "Description": "Graphite window frame with quiet monochrome controls",
+    "Id": "SoftGraphiteUnifiedLight",
+    "License": "GPL v3",
+    "Version": "1.0",
+    "X-KDE-PluginInfo-blur": false,
+    "X-KPackage-Dependencies": []
+  }
+}

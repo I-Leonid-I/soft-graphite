@@ -1,0 +1,26 @@
+Soft Graphite dark/light — revision 40
+
+Use the native Dark Mode switch in either brightness tray. Its KDE settings:
+DefaultDarkLookAndFeel=org.leonid.softgraphite.dark
+DefaultLightLookAndFeel=org.leonid.softgraphite.light
+The theme packages contain only widget style, palette, icons, Plasma theme and
+window decoration choices. They deliberately have no layout, wallpaper, font,
+splash, cursor or animation defaults.
+
+Widget engine: SoftGraphiteDuo, with original dark assets byte-for-byte in
+SoftGraphiteDuoDark. The dark package selects kvantum-dark, light selects kvantum.
+These distinct native Qt styles make existing Qt windows refresh without restart.
+Light assets preserve geometry; reference-based line-edit SVG parts are expanded
+to avoid lost xlink rendering/black fill under the lighter focus border.
+
+The Plasma applets now select their corresponding text/hover/glyph colors from
+the active palette. Canvas controls repaint when text color changes.
+Native Aurorae pair retains our left controls with the global CSD list empty.
+
+GraphiteThemeSync lives in the existing PanelTools plugin. A KConfigWatcher only
+responds to LookAndFeelPackage changes, coalesces the completed application for
+120 ms, then notifies the explicit General/ColorScheme key. This lets the stock
+KDE GTK integration use the final palette and set GTK preferences and colors.
+Only our two package IDs are handled. No new process, polling or forced styling
+of applications with their own independently configured themes.
+

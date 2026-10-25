@@ -1,0 +1,13 @@
+[Unit]
+Description=Soft Graphite fullscreen panels and controls
+After=plasma-kwin_wayland.service plasma-plasmashell.service
+PartOf=graphical-session.target
+[Service]
+Type=dbus
+BusName=org.leonid.SoftGraphite
+ExecStart=%h/.local/share/soft-graphite/soft-graphite-edge %h/.local/share/soft-graphite
+ExecStartPost=/usr/bin/python3 %h/.local/share/soft-graphite/start-kwin.py
+Restart=on-failure
+RestartSec=3
+[Install]
+WantedBy=plasma-workspace.target

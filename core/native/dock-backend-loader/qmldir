@@ -1,0 +1,2 @@
+module Graphite.BackendLoader
+plugin GraphiteBackendLoader

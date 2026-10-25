@@ -1,0 +1,15 @@
+[kdeglobals][KDE]
+widgetStyle=kvantum-dark
+
+[kdeglobals][General]
+ColorScheme=SoftGraphite
+
+[kdeglobals][Icons]
+Theme=SoftGraphiteIcons-Grey-Nord-Dark
+
+[plasmarc][Theme]
+name=soft-graphite
+
+[kwinrc][org.kde.kdecoration2]
+library=org.leonid.softgraphite.aurorae_pair
+theme=__aurorae__svg__SoftGraphiteUnified

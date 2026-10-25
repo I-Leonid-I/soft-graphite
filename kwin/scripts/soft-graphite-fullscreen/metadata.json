@@ -1,0 +1,1 @@
+{"KPlugin":{"Id":"soft-graphite-fullscreen","Name":"Soft Graphite Fullscreen","Description":"Per-monitor fullscreen, corner restore and native panel reveal","Version":"1.0","License":"MIT"},"KPackageStructure":"KWin/Script","X-Plasma-API":"javascript","X-Plasma-MainScript":"code/main.js","X-KDE-PluginKeyword":"soft-graphite-fullscreen"}

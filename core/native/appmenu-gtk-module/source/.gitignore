@@ -1,0 +1,7 @@
+# cmake build dir
+/build
+# kdevelop
+/.kdev4
+/*.kdev4
+# vscode clangd
+/.cache

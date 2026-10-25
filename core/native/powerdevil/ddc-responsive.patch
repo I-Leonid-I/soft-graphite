@@ -1,0 +1,69 @@
+--- a/daemon/controllers/ddcutildisplay.cpp
++++ b/daemon/controllers/ddcutildisplay.cpp
+@@ -14,7 +14,9 @@
+ 
+ using namespace std::chrono_literals;
+ 
+-constexpr std::chrono::milliseconds s_setBrightnessDelay = 1s;
++// Coalesce brief bursts without postponing every update until the drag stops.
++// A single in-flight transaction bounds DDC traffic even on slow monitors.
++constexpr std::chrono::milliseconds s_setBrightnessDelay = 100ms;
+ constexpr std::array<std::chrono::milliseconds, 3> s_backoffRetryIntervals = {1s, 2s, 3s};
+ 
+ #ifdef WITH_DDCUTIL
+@@ -196,20 +198,31 @@
+ {
+ #ifdef WITH_DDCUTIL
+     if (m_supportsBrightness) {
++        if (m_brightness == value) {
++            return;
++        }
++        m_brightness = value;
+         m_retryCounter = 0;
+-        m_timer->start(s_setBrightnessDelay);
+-        m_brightness = value;
++        if (!m_writeInFlight && !m_timer->isActive()) {
++            m_timer->start(s_setBrightnessDelay);
++        }
+     }
+ #endif
+ }
+ 
+ void DDCutilDisplay::onSetBrightnessTimeout()
+ {
+-    Q_EMIT ddcBrightnessChangeRequested(m_brightness, this);
++    if (m_writeInFlight || !m_supportsBrightness) {
++        return;
++    }
++    m_writeInFlight = true;
++    m_requestedBrightness = m_brightness;
++    Q_EMIT ddcBrightnessChangeRequested(m_requestedBrightness, this);
+ }
+ 
+ void DDCutilDisplay::ddcBrightnessChangeFinished(bool success)
+ {
++    m_writeInFlight = false;
+     if (!success) {
+         if (m_retryCounter < s_backoffRetryIntervals.size()) {
+             m_timer->start(s_backoffRetryIntervals[m_retryCounter]);
+@@ -223,6 +236,9 @@
+         Q_EMIT supportsBrightnessChanged(false);
+     } else if (m_retryCounter > 0) { // only yell if we also logged the "retrying" message
+         qCWarning(POWERDEVIL) << "[DDCutilDisplay]:" << m_label << "succeeded to set DDC/CI brightness";
++    }
++    if (success && m_brightness != m_requestedBrightness) {
++        m_timer->start(s_setBrightnessDelay);
+     }
+ }
+ 
+--- a/daemon/controllers/ddcutildisplay.h
++++ b/daemon/controllers/ddcutildisplay.h
+@@ -77,6 +77,8 @@
+     int m_brightness;
+     int m_maxBrightness;
+     bool m_supportsBrightness;
++    bool m_writeInFlight = false;
++    int m_requestedBrightness = -1;
+     QByteArray m_edidData;
+ };
+ 

@@ -1,0 +1,11 @@
+{
+  "KPackageStructure": "Plasma/LookAndFeel",
+  "KPlugin": {
+    "Id": "org.leonid.softgraphite.dark",
+    "Name": "Soft Graphite Dark",
+    "Name[ru]": "Мягкий графит — тёмный",
+    "Description": "Matched Soft Graphite appearance with native light/dark switching",
+    "Version": "1.1",
+    "License": "CC0-1.0"
+  }
+}

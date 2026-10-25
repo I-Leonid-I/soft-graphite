@@ -1,0 +1,16 @@
+#!/bin/sh
+# Soft Graphite: Claude Desktop through XWayland, so Electron exports its File/Edit/View menu
+# to the top-left panel (global menu, published for XWayland windows by appmenu-bridge).
+# Electron has no global-menu support on native Wayland. Same route as ~/.local/bin/code.
+# Under X11 the stock build draws a translucent shadow margin that the KDE frame wraps, so a
+# copy patched for the native frame is used (rebuilt here or by claude-autopatch after updates);
+# if that fails, the unmodified app still starts.
+graphite="$HOME/.local/share/soft-graphite"
+app=/usr/lib/claude-desktop/claude-desktop
+if python3 "$graphite/rebuild-claude.py" --if-stale >/dev/null 2>&1 && [ -x "$graphite/apps/claude-desktop/claude-desktop" ]; then
+    app="$graphite/apps/claude-desktop/claude-desktop"
+fi
+if [ ! -e /usr/lib/libdbusmenu-glib.so.4 ]; then
+    export LD_LIBRARY_PATH="$graphite/appmenu/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+exec "$app" --ozone-platform=x11 "$@"

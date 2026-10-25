@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.leonid.softgraphite.keyboard",
+    "Name": "Soft Graphite keyboard",
+    "Version": "1.1",
+    "License": "GPL-2.0-or-later",
+    "Icon": "preferences-desktop-keyboard",
+    "Category": "System Information"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

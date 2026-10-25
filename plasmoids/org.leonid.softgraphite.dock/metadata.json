@@ -1,0 +1,17 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.leonid.softgraphite.dock",
+    "Name": "Soft Graphite Dock",
+    "Description": "Native Plasma task manager with quiet tactile feedback",
+    "Version": "1.0",
+    "License": "GPL-2.0-or-later",
+    "Icon": "preferences-system-windows",
+    "Category": "Windows and Tasks"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-Provides": [
+    "org.kde.plasma.multitasking"
+  ],
+  "X-Plasma-MainScript": "ui/main.qml"
+}

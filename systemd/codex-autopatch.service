@@ -1,0 +1,7 @@
+[Unit]
+Description=Auto-reapply native frame and top panel menu patch to Codex
+Documentation=file://%h/.local/share/soft-graphite/
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/soft-graphite/rebuild-codex.py

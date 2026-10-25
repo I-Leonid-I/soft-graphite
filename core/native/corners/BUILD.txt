@@ -1,0 +1,5 @@
+Soft Graphite native corners, based on KDE Rounded Corners GPL source.
+Build on the installed KWin/Qt ABI using cmake. Target kwin4_effect_shapecorners; install the resulting library under ~/.local/lib/qt6/plugins/kwin/effects/plugins/softgraphite_corners.so. Install generated src/shaders/shapecorners{,_core}.frag under ~/.local/share/kwin/shaders/.
+Enable softgraphite_cornersEnabled=true and disable kwin4_effect_shapecornersEnabled in kwinrc [Plugins]. Never run both copies together.
+The new library basename is intentional: Qt keeps already loaded plugin code cached in a running session. A subsequent native-code update may need a fresh desktop session to replace cached code. Shader-only changes can be loaded by reloading the effect.
+Source archive includes upstream license and local patch. No polling service or additional render pass.

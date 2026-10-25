@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for updates to Claude Desktop (/usr/lib/claude-desktop)
+PartOf=graphical-session.target
+
+[Path]
+PathModified=/usr/lib/claude-desktop/resources/app.asar
+PathModified=/usr/lib/claude-desktop/claude-desktop
+Unit=claude-autopatch.service
+
+[Install]
+WantedBy=default.target

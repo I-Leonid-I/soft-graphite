@@ -1,0 +1,17 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Name": "Уведомления — Мягкий графит",
+    "Description": "Native Plasma notifications with Soft Graphite presentation",
+    "Version": "1.0",
+    "License": "GPL-2.0-or-later",
+    "Icon": "preferences-desktop-notification",
+    "Category": "System Information"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-NotificationArea": true,
+  "X-Plasma-NotificationAreaCategory": "SystemServices",
+  "X-Plasma-Provides": [
+    "org.kde.plasma.notifications"
+  ]
+}

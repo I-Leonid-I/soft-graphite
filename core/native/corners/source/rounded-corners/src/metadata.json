@@ -1,0 +1,27 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "therealestrob@gmail.com",
+                "Name": "Rob"
+            },
+            {
+                "Email": "matinlotfali@gmail.com",
+                "Name": "Matin Lotfaliei"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Shared window rounding with transparent client-corner repair below server titlebars.",
+        "Description[ru]": "Единое скругление окон и устранение прозрачных вырезов под системным заголовком.",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "Soft Graphite — Unified Corners",
+        "Name[ru]": "Soft Graphite — единые углы",
+        "ServiceTypes": [
+            "KWin/Effect"
+        ],
+        "Version": "git"
+    },
+    "X-KDE-Ordering": 5,
+    "X-KDE-ConfigModule": "kwin_shapecorners_config"
+}

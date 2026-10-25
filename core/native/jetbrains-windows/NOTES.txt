@@ -1,0 +1,42 @@
+Soft Graphite — IDEA pre-display integration, 2026-10-10
+
+Tested: IDEA Ultimate 2026.2.3 Flatpak, JBR 25.0.4+1-508.27, Wayland.
+
+FrameInfo: getExtendedState() and getFullScreen() return NORMAL/false. This is
+persisted restoration data, not the live AWT window state. Manual maximize and
+fullscreen remain available. Bounds, modification state and copy are untouched.
+
+WindowRoundedCornersManager.configure(DialogWrapper): return early only when
+the wrapper owns a decorated java.awt.Dialog. KWin draws and rounds its frame.
+Undecorated popups retain the original method body. This avoids a second rounded
+top below the server titlebar, including in direct single-window screenshots.
+
+Only exact audited class hashes are transformed. Unknown classes remain original
+with a single diagnostic line. No JDK, IDE distribution or user project file is
+modified. The instrumentation transformer unregisters after both target classes
+have been seen. There is no background polling, renderer or process.
+
+build.py rebuilds from the locally installed package only after both checksums
+match. Requires that package's JBR javac/java, no external bytecode library.
+It does not silently approve a new class after an IDE upgrade.
+
+Runtime copy:
+~/.var/app/com.jetbrains.IntelliJ-IDEA-Ultimate/config/soft-graphite/windowed-start.jar
+Referenced only by this IDEA profile's idea64.vmoptions. The global Java policy
+contains three -D preferences, never -javaagent, so build-tool JVMs do not load it.
+
+Shared preferences:
+sun.awt.wl.WindowDecorationStyle=server
+ide.linux.hide.native.title=false
+ide.message.dialogs.as.swing.alert.show.title.bar=true
+
+These cover compatible Java/JetBrains applications, including later installations.
+Unknown runtimes ignore the preferences. Old native launchers inherit the new
+session environment only after the next login; Flatpak overrides apply per launch.
+
+The embedded transformed class resources derive from JetBrains intellij-community,
+Copyright JetBrains s.r.o. and contributors, Apache License 2.0.
+https://github.com/JetBrains/intellij-community
+Source references: platform/platform-impl/src/com/intellij/openapi/wm/impl/ProjectFrameBounds.kt
+and platform/platform-impl/src/com/intellij/ui/WindowRoundedCornersManager.java.
+

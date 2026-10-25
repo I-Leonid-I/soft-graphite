@@ -1,0 +1,1 @@
+{"KPlugin":{"Name":"Soft Graphite window layers","Description":"Keep manually dragged windows above the fullscreen windows underneath them.","License":"GPL-2.0-or-later","EnabledByDefault":false},"X-KDE-Ordering":98,"org.kde.kwin.effect":{"internal":false}}

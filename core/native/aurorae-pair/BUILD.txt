@@ -1,0 +1,11 @@
+Soft Graphite Aurorae pair — revision 40
+Same native Aurorae v2/KDecoration3 as revision 09. The fixed left X/I/A group
+now recognizes both SoftGraphiteUnified and SoftGraphiteUnifiedLight.
+System decoration button lists remain empty so GTK does not recreate inner CSD
+buttons when the GTK integration updates after an appearance change.
+
+Build source.tar.gz/aurorae-standalone with cmake Release, installed Qt/KF/KDecoration3,
+ECM_DIR configured as appropriate. Target aurorae_v2. Copy its resulting shared
+module to ~/.local/lib/qt6/plugins/org.kde.kdecoration3/.
+Library ID org.leonid.softgraphite.aurorae_pair avoids reusing the cached old plugin.
+Source geometry, input handling and animations otherwise unchanged.

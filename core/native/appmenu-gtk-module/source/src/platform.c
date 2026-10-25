@@ -1,0 +1,321 @@
+/*
+ * appmenu-gtk-module
+ * Copyright 2012 Canonical Ltd.
+ * Copyright (C) 2015-2017 Konstantin Pugin <ria.freelander@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors: Ryan Lortie <desrt@desrt.ca>
+ *          William Hua <william.hua@canonical.com>
+ *          Konstantin Pugin <ria.freelander@gmail.com>
+ *          Lester Carballo Perez <lestcape@gmail.com>
+ */
+
+#include "platform.h"
+#include "consts.h"
+#include "datastructs-private.h"
+#include "datastructs.h"
+#include "support.h"
+#include <string.h>
+
+#ifdef GDK_WINDOWING_X11
+G_GNUC_INTERNAL char *gtk_widget_get_x11_property_string(GtkWidget *widget, const char *name)
+{
+	GdkWindow *window;
+	GdkDisplay *display;
+	Display *xdisplay;
+	Window xwindow;
+	Atom property;
+	Atom actual_type;
+	int actual_format;
+	unsigned long nitems;
+	unsigned long bytes_after;
+	unsigned char *prop = NULL;
+
+	g_return_val_if_fail(GTK_IS_WIDGET(widget), NULL);
+
+	window   = gtk_widget_get_window(widget);
+	display  = gdk_window_get_display(window);
+	xdisplay = GDK_DISPLAY_XDISPLAY(display);
+	xwindow  = GDK_WINDOW_XID(window);
+
+	property = None;
+
+	if (display != NULL)
+		property = gdk_x11_get_xatom_by_name_for_display(display, name);
+
+	if (property == None)
+		property = gdk_x11_get_xatom_by_name(name);
+
+	g_return_val_if_fail(property != None, NULL);
+
+	if (XGetWindowProperty(xdisplay,
+	                       xwindow,
+	                       property,
+	                       0,
+	                       G_MAXLONG,
+	                       False,
+	                       AnyPropertyType,
+	                       &actual_type,
+	                       &actual_format,
+	                       &nitems,
+	                       &bytes_after,
+	                       &prop) == Success)
+	{
+		char *string = NULL;
+		if (actual_format == 8 && prop != NULL)
+		{
+			string = g_strdup((const char *)prop);
+		}
+
+		if (prop != NULL)
+			XFree(prop);
+
+		return string;
+	}
+
+	return NULL;
+}
+
+G_GNUC_INTERNAL void gtk_widget_set_x11_property_string(GtkWidget *widget, const char *name,
+                                                        const char *value)
+{
+	GdkWindow *window;
+	GdkDisplay *display;
+	Display *xdisplay;
+	Window xwindow;
+	Atom property;
+	Atom type;
+
+	g_return_if_fail(GTK_IS_WIDGET(widget));
+
+	window   = gtk_widget_get_window(widget);
+	display  = gdk_window_get_display(window);
+	xdisplay = GDK_DISPLAY_XDISPLAY(display);
+	xwindow  = GDK_WINDOW_XID(window);
+
+	property = None;
+
+	if (display != NULL)
+		property = gdk_x11_get_xatom_by_name_for_display(display, name);
+
+	if (property == None)
+		property = gdk_x11_get_xatom_by_name(name);
+
+	g_return_if_fail(property != None);
+
+	type = None;
+
+	if (display != NULL)
+		type = gdk_x11_get_xatom_by_name_for_display(display, "UTF8_STRING");
+
+	if (type == None)
+		type = gdk_x11_get_xatom_by_name("UTF8_STRING");
+
+	g_return_if_fail(type != None);
+
+	if (value != NULL)
+		XChangeProperty(xdisplay,
+		                xwindow,
+		                property,
+		                type,
+		                8,
+		                PropModeReplace,
+		                (unsigned char *)value,
+		                strlen(value));
+	else
+		XDeleteProperty(xdisplay, xwindow, property);
+}
+
+/* The shared menu connector now exports com.canonical.dbusmenu directly.
+ * Do not publish legacy _GTK_* addresses for a GMenu object that no longer exists. */
+G_GNUC_INTERNAL WindowData *gtk_x11_window_get_window_data(GtkWindow *window)
+{
+    if (window == NULL || !GTK_IS_WINDOW(window)) return NULL;
+    WindowData *data = g_object_get_qdata(G_OBJECT(window), appmenu_gtk_wayland_window_data_quark());
+    if (data == NULL) {
+        static guint window_id = 0;
+        data = window_data_new();
+        data->window_id = window_id++;
+        data->menu_model = g_menu_new();
+        g_object_set_qdata_full(G_OBJECT(window), appmenu_gtk_wayland_window_data_quark(), data, window_data_free);
+    }
+    return data;
+}
+
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+
+#include <wayland-client.h>
+#include "wayland-client-protocol.h"
+#include "appmenu.h"
+#include <gobject/gsignal.h>
+#include <libdbusmenu-gtk/parser.h>
+
+struct org_kde_kwin_appmenu_manager *org_kde_kwin_appmenu_manager = NULL;
+
+static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
+	if (strcmp(interface, org_kde_kwin_appmenu_manager_interface.name) == 0) {
+		g_debug("registry_global org_kde_kwin_appmenu_manager");
+		org_kde_kwin_appmenu_manager = wl_registry_bind(registry, name, &org_kde_kwin_appmenu_manager_interface, 1);
+	}
+}
+
+static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name) {
+	// Do nothing
+}
+
+static const struct wl_registry_listener wl_registry_listener = {
+		.global = registry_global,
+		.global_remove = registry_global_remove,
+};
+
+static gboolean wl_initialized = FALSE;
+
+void appmenu_wl_init()
+{
+	if (wl_initialized)
+		return;
+
+	GdkDisplay* disp = gdk_display_get_default();
+	if (!disp)
+	{
+		g_debug("no default display");
+		return;
+	}
+	if (!GDK_IS_WAYLAND_DISPLAY(disp))
+	{
+		g_debug("not a wayland display");
+		wl_initialized = TRUE;
+		return;
+	}
+	g_debug("gdk_window_get_display %ld", (long)disp);
+	struct wl_display *wl_display = gdk_wayland_display_get_wl_display(disp);
+	if (!wl_display)
+	{
+		g_debug("no wl_display");
+		return;
+	}
+	g_debug("gdk_wayland_display_get_wl_display %ld", (long)wl_display);
+	struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+	if (!wl_registry)
+	{
+		g_debug("no wl_registry");
+		return;
+	}
+	g_debug("wl_display_get_registry %ld", (long)wl_registry);
+
+	wl_registry_add_listener(wl_registry, &wl_registry_listener, NULL);
+	wl_display_roundtrip(wl_display);
+	wl_registry_destroy(wl_registry);
+
+	wl_initialized = TRUE;
+
+	if (org_kde_kwin_appmenu_manager != NULL)
+	{
+		g_debug("appmenu_wl_init: found org_kde_kwin_appmenu_manager");
+		set_gtk_shell_shows_menubar(true);
+	}
+}
+
+struct org_kde_kwin_appmenu *appmenu_set_address(GdkWindow* gdk_win, const char* unique_bus_name, const char* menubar_object_path)
+{
+	if (gdk_win == NULL)
+	{
+		g_debug("appmenu_set_address: gdk_win is NULL");
+		return NULL;
+	}
+
+#ifdef GDK_WINDOWING_X11
+    if (GDK_IS_X11_WINDOW(gdk_win)) {
+        Display *display = GDK_WINDOW_XDISPLAY(gdk_win);
+        Window xid = GDK_WINDOW_XID(gdk_win);
+        const char *names[] = {"_KDE_NET_WM_APPMENU_SERVICE_NAME", "_KDE_NET_WM_APPMENU_OBJECT_PATH"};
+        const char *values[] = {unique_bus_name, menubar_object_path};
+        for (guint i=0;i<2;++i)
+            XChangeProperty(display, xid, XInternAtom(display,names[i],False),
+                            XInternAtom(display,"STRING",False),8,PropModeReplace,
+                            (const unsigned char *)values[i],strlen(values[i]));
+        XFlush(display);
+        return NULL;
+    }
+#endif
+
+	if (org_kde_kwin_appmenu_manager != NULL)
+	{
+		g_debug("org_kde_kwin_appmenu_set_address: %s %s", unique_bus_name, menubar_object_path);
+		struct wl_surface *wl_surface = gdk_wayland_window_get_wl_surface(gdk_win);
+
+		if (wl_surface == NULL)
+		{
+			g_debug("appmenu_set_address: wl_surface is NULL");
+			return NULL;
+		}
+
+		struct org_kde_kwin_appmenu *appmenu = org_kde_kwin_appmenu_manager_create(org_kde_kwin_appmenu_manager, wl_surface);
+		org_kde_kwin_appmenu_set_address(appmenu, unique_bus_name, menubar_object_path);
+
+		GdkDisplay *display = gdk_display_get_default();
+		if (display != NULL)
+			wl_display_flush(gdk_wayland_display_get_wl_display(display));
+
+		return appmenu;
+	}
+	else
+	{
+		g_debug("org_kde_kwin_appmenu_manager is NULL");
+	}
+	return NULL;
+}
+
+void release_appmenu(struct org_kde_kwin_appmenu *appmenu)
+{
+	org_kde_kwin_appmenu_release(appmenu);
+}
+
+void gdk_wayland_window_set_dbus_properties_libgtk_only(
+    GdkWindow *window, const char *application_id, const char *app_menu_path,
+    const char *menubar_path, const char *window_object_path, const char *application_object_path,
+    const char *unique_bus_name);
+
+G_GNUC_INTERNAL WindowData *gtk_wayland_window_get_window_data(GtkWindow *window)
+{
+	g_debug("gtk_wayland_window_get_window_data");
+	if (org_kde_kwin_appmenu_manager == NULL)
+	{
+		appmenu_wl_init();
+	}
+	WindowData *window_data;
+
+	if (window == NULL || !GTK_IS_WINDOW(window))
+		return NULL;
+
+	window_data = g_object_get_qdata(G_OBJECT(window), appmenu_gtk_wayland_window_data_quark());
+	if (window_data == NULL)
+	{
+		g_debug("window_data NOT cached");
+		static guint window_id;
+
+		window_data             = window_data_new();
+		window_data->menu_model = g_menu_new();
+		window_data->window_id  = window_id++;
+
+		g_object_set_qdata_full(G_OBJECT(window),
+		                        appmenu_gtk_wayland_window_data_quark(),
+		                        window_data,
+		                        window_data_free);
+	}
+	return window_data;
+}
+#endif

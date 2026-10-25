@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for updates to Antigravity (/opt/Antigravity)
+PartOf=graphical-session.target
+
+[Path]
+PathModified=/opt/Antigravity/resources/app.asar
+PathModified=/opt/Antigravity/antigravity
+Unit=antigravity-autopatch.service
+
+[Install]
+WantedBy=default.target

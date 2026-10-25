@@ -1,0 +1,2 @@
+[Environment]
+YANDEX_BROWSER_USER_FLAGS=--ya-enable-system-frame --force-dark-mode

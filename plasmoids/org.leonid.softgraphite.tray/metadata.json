@@ -1,0 +1,14 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.leonid.softgraphite.tray",
+    "Name": "Soft Graphite Tray",
+    "Description": "Native Plasma tray with compact hidden items",
+    "Version": "1.0",
+    "License": "LGPL-2.0-or-later",
+    "Icon": "preferences-desktop-notification",
+    "Category": "Windows and Tasks"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-ContainmentType": "CustomEmbedded"
+}

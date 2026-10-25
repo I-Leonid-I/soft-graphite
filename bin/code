@@ -1,0 +1,67 @@
+#!/bin/sh
+# Native VS Code menus exported through Electron's supported X11 route.
+# Keep the library private; unrelated apps and shells retain their environment.
+if [ ! -e /usr/lib/libdbusmenu-glib.so.4 ]; then
+    graphite_menu_lib="$HOME/.local/share/soft-graphite/appmenu/lib"
+    export LD_LIBRARY_PATH="$graphite_menu_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+# Soft Graphite: Always start in centered floating window mode, on the active screen / target monitor.
+/usr/bin/python3 -c "
+import json, os, subprocess
+
+p = os.path.expanduser('~/.config/Code/User/globalStorage/storage.json')
+
+def get_active_screen_x():
+    try:
+        out = subprocess.check_output(
+            ['qdbus6', 'org.leonid.SoftGraphite', '/SoftGraphite', 'org.leonid.SoftGraphite.PointerState'],
+            timeout=0.08
+        ).decode().strip()
+        px = int(out.split(',')[0])
+        return 1920 if px >= 1920 else 0
+    except Exception:
+        return 0
+
+def sanitize(ui, active_sx):
+    if not isinstance(ui, dict):
+        return False
+    is_max = ui.get('mode') != 1 or ui.get('width', 0) >= 1880 or ui.get('height', 0) >= 1000
+    if is_max:
+        ui['mode'] = 1
+        ui['width'] = 1200
+        ui['height'] = 720
+        ui['x'] = active_sx + 360
+        ui['y'] = 180
+        return True
+    cur_x = ui.get('x', active_sx + 360)
+    cur_sx = 1920 if cur_x >= 1920 else 0
+    if cur_sx != active_sx:
+        ui['x'] = active_sx + (cur_x - cur_sx)
+        return True
+    return False
+
+try:
+    if os.path.exists(p):
+        with open(p, 'r') as f:
+            d = json.load(f)
+        changed = False
+        ws = d.get('windowsState')
+        if isinstance(ws, dict):
+            active_sx = get_active_screen_x()
+            law = ws.get('lastActiveWindow')
+            if isinstance(law, dict):
+                if sanitize(law.get('uiState'), active_sx):
+                    changed = True
+            for w in ws.get('openedWindows', []):
+                if isinstance(w, dict):
+                    if sanitize(w.get('uiState'), active_sx):
+                        changed = True
+        if changed:
+            with open(p, 'w') as f:
+                json.dump(d, f)
+except Exception:
+    pass
+" 2>/dev/null
+
+exec /usr/bin/code --ozone-platform=x11 "$@"

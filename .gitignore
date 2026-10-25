@@ -1,0 +1,11 @@
+# Build outputs: native parts are always built on the target machine.
+*.so
+*.so.*
+*.moc
+*.o
+build/
+__pycache__/
+*.pyc
+core/native/chatgpt-menu/menu-bridge
+core/native/jetbrains-globalmenu/classes/
+core/native/jetbrains-windows/*.jar

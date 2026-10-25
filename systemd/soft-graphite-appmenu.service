@@ -1,0 +1,12 @@
+[Unit]
+Description=Soft Graphite Global AppMenu Bridge for XWayland
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/share/soft-graphite/appmenu-bridge
+Restart=always
+RestartSec=1s
+
+[Install]
+WantedBy=graphical-session.target

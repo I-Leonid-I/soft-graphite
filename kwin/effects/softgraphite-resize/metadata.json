@@ -1,0 +1,5 @@
+{
+ "KPackageStructure":"KWin/Effect",
+ "KPlugin":{"Id":"softgraphite-resize","Name":"Soft Graphite — Window transitions","Description":"One continuous fullscreen and maximize transition","License":"GPL-2.0-or-later","EnabledByDefault":false},
+ "X-KDE-Ordering":60,"X-KWin-Exclusive-Category":"fullscreen","X-Plasma-API":"javascript"
+}

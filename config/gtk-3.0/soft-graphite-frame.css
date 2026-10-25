@@ -1,0 +1,2 @@
+/* KWin supplies the frame, shadow and rounded clipping. */
+window.csd decoration { border-radius: 0; border: none; box-shadow: none; margin: 0; }

@@ -1,0 +1,5 @@
+[Session Bus Policy]
+com.canonical.AppMenu.Registrar=talk
+
+[Environment]
+_JAVA_OPTIONS=-Dsun.awt.wl.WindowDecorationStyle=server -Dide.linux.hide.native.title=false -Dide.message.dialogs.as.swing.alert.show.title.bar=true

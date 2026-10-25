@@ -1,0 +1,14 @@
+{
+  "KPackageStructure": "KWin/Effect",
+  "KPlugin": {
+    "Id": "softgraphite-to-icon",
+    "Name": "Soft Graphite \u00b7 To Icon",
+    "Description": "Native minimize animation with a 320 ms graphite timing",
+    "License": "GPL-2.0-or-later",
+    "Version": "1.0",
+    "Category": "Window Management"
+  },
+  "X-KDE-Ordering": 60,
+  "X-KWin-Exclusive-Category": "minimize",
+  "X-Plasma-API": "javascript"
+}

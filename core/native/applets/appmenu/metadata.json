@@ -1,0 +1,11 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Name": "Soft Graphite appmenu",
+    "Version": "1.1",
+    "License": "GPL-2.0-or-later",
+    "Icon": "application-menu",
+    "Category": "System Information"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

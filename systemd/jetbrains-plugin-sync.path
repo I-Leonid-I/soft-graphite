@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for new JetBrains IDE installations and directories
+PartOf=graphical-session.target
+
+[Path]
+PathModified=%h/.local/share/JetBrains
+PathModified=%h/.config/JetBrains
+Unit=jetbrains-plugin-sync.service
+
+[Install]
+WantedBy=default.target
