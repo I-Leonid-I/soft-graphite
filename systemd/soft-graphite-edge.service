@@ -9,5 +9,7 @@ ExecStart=%h/.local/share/soft-graphite/soft-graphite-edge %h/.local/share/soft-
 ExecStartPost=/usr/bin/python3 %h/.local/share/soft-graphite/start-kwin.py
 Restart=on-failure
 RestartSec=3
+# A post-update rebuild in start-kwin.py takes longer than the default 15s.
+TimeoutStartSec=5min
 [Install]
 WantedBy=plasma-workspace.target

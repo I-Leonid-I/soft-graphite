@@ -32,6 +32,7 @@ class Bridge:public QObject {
  QMap<QString,bool> flags;
  QMap<QString,QTimer*> timers;
  QTimer saveTimer;
+ QTimer panelTimer;
  SnapPreview preview;QString previewOutput,previewKind;QRect previewRect;
  QPoint pointer;
  quint64 pointerCalls=0,publishes=0,writes=0;
@@ -41,11 +42,13 @@ class Bridge:public QObject {
   const QString next=QJsonDocument(a).toJson(QJsonDocument::Compact);if(next==ui)return;ui=next;++publishes;
   auto m=QDBusMessage::createSignal("/SoftGraphite","org.freedesktop.DBus.Properties","PropertiesChanged");m<<QString("org.leonid.SoftGraphite")<<QVariantMap{{"uiState",ui}}<<QStringList{};QDBusConnection::sessionBus().send(m);
  }
- void panelMode(QString n){
+ void panelMode(QString){panelTimer.start();}
+ void applyPanelMode(){
   // The controller alone owns fullscreen hiding. Plasma's DodgeWindows would
   // independently hide the dock behind a large but still windowed application.
-  int left=n=="HDMI-A-1"?46:67,right=n=="HDMI-A-1"?49:70,dock=n=="HDMI-A-1"?23:65;
-  QString code=QString("[%1,%2,%3].forEach(id=>{var p=panelById(id);if(p)p.hiding='windowsgobelow';});").arg(left).arg(right).arg(dock);
+  // Deferred and write-only-on-change: setting hiding while plasmashell starts
+  // or rebuilds panels after a screen hotplug crashes it (KConfigGroup::parent).
+  QString code="[46,49,23,67,70,65].forEach(id=>{var p=panelById(id);if(p&&p.hiding!='windowsgobelow')p.hiding='windowsgobelow';});";
   auto m=QDBusMessage::createMethodCall("org.kde.plasmashell","/PlasmaShell","org.kde.PlasmaShell","evaluateScript");m<<code;QDBusConnection::sessionBus().asyncCall(m);
  }
  void hold(QString n,QString role,bool trigger,bool inside){
@@ -67,6 +70,7 @@ public:
  Bridge(QString path):base(path){
   refreshScreens();QFile f(base+"/session-state.json");if(f.open(QIODevice::ReadOnly)){state=QString::fromUtf8(f.readAll());auto o=QJsonDocument::fromJson(state.toUtf8()).object();restoreWindows=o["windows"].toArray();auto p=o["panels"].toObject();for(auto n:screens.keys()){screens[n].left=fromRect(p[n].toObject()["left"].toObject());screens[n].right=fromRect(p[n].toObject()["right"].toObject());screens[n].dock=fromRect(p[n].toObject()["dock"].toObject());}}
   saveTimer.setSingleShot(true);saveTimer.setInterval(500);connect(&saveTimer,&QTimer::timeout,this,&Bridge::save);
+  panelTimer.setSingleShot(true);panelTimer.setInterval(3000);connect(&panelTimer,&QTimer::timeout,this,&Bridge::applyPanelMode);
   auto w=new QDBusServiceWatcher("org.kde.plasmashell",QDBusConnection::sessionBus(),QDBusServiceWatcher::WatchForRegistration,this);connect(w,&QDBusServiceWatcher::serviceRegistered,this,[this]{for(auto it=screens.begin();it!=screens.end();++it)panelMode(it.key());});
   connect(qGuiApp,&QGuiApplication::screenAdded,this,[this]{refreshScreens();publish();});connect(qGuiApp,&QGuiApplication::screenRemoved,this,[this]{refreshScreens();publish();});
   publish();

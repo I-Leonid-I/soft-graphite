@@ -44,8 +44,11 @@ def get_kwin_version():
         return "unknown"
 
 def get_plasma_version():
+    # offscreen: the pacman hook runs without a display, where plasmashell
+    # aborts on --version and the stamp would never match start-kwin.py.
     try:
-        out = subprocess.check_output(["plasmashell", "--version"], text=True)
+        out = subprocess.check_output(["plasmashell", "--version"], text=True,
+                                      env={**os.environ, "QT_QPA_PLATFORM": "offscreen"})
         return out.strip()
     except Exception:
         return "unknown"

@@ -30,7 +30,7 @@ if cfg.get('org.kde.kdecoration2','library',fallback='')==expected:
 stamp_file=base/'last-built-version.json'
 try:
     kw_ver=subprocess.check_output(['kwin_wayland','--version'],text=True).strip()
-    ps_ver=subprocess.check_output(['plasmashell','--version'],text=True).strip()
+    ps_ver=subprocess.check_output(['plasmashell','--version'],text=True,env={**__import__('os').environ,'QT_QPA_PLATFORM':'offscreen'}).strip()
     try:
         qt_out=subprocess.check_output(['qmake6','-v'],text=True)
         qt_ver=next((l.strip() for l in qt_out.splitlines() if "Using Qt version" in l), qt_out.strip())
