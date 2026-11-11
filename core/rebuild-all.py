@@ -9,8 +9,6 @@ from pathlib import Path
 HOME = Path.home()
 BASE = HOME / ".local/share/soft-graphite"
 TOOLS = BASE / "build-tools/usr"
-# User-local build tools exist only where packages could not be installed;
-# otherwise cmake/ninja/extra-cmake-modules come from the distribution.
 BIN_NINJA = BASE / "bin/ninja" if (BASE / "bin/ninja").exists() else Path(shutil.which("ninja") or "ninja")
 LIB_PLUGINS = HOME / ".local/lib/qt6/plugins"
 EFFECTS_DIR = LIB_PLUGINS / "kwin/effects/plugins"
@@ -178,6 +176,22 @@ def build_appmenu_bridge():
     run(["gcc", "-O2", str(src), "-o", str(tmp), *flags])
     os.replace(tmp, out)
 
+def build_task_done():
+    """sg-task-done: marks Google tasks done from the clock popup (rev 51).
+    Links against KDE PIM (Akonadi, KCalendarCore); optional, so a failure
+    here must not stop the rest of the rebuild."""
+    print("[6b/7] Building sg-task-done...")
+    src = BASE / "native/task-done"
+    build = src / "build"
+    try:
+        run(["cmake", "-B", str(build), "-S", str(src), "-G", "Ninja",
+             f"-DCMAKE_PREFIX_PATH={TOOLS}", f"-DCMAKE_MAKE_PROGRAM={BIN_NINJA}",
+             "-DCMAKE_BUILD_TYPE=Release"])
+        run([str(BIN_NINJA), "-C", str(build)])
+        install(build / "sg-task-done", BASE / "bin/sg-task-done")
+    except Exception as ex:
+        print("sg-task-done skipped:", ex)
+
 def sync_jetbrains():
     sync_script = BASE / "sync-jetbrains-plugins.py"
     if sync_script.exists():
@@ -193,6 +207,7 @@ def main():
     build_panels()
     build_applet_facades()
     build_appmenu_bridge()
+    build_task_done()
     sync_jetbrains()
     reload_system(no_reload=no_reload)
 

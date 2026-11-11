@@ -12,6 +12,7 @@ notices are kept in the files. Thank you to all of them.
 | `plasmoids/…tray`, `…notifications`, `…appmenu`, `…clock`, `…keyboard`, `…brightness` | Plasma system tray, notifications, app menu, digital clock, keyboard layout, brightness applets | KDE | GPL-2.0-or-later / LGPL-2.0-or-later (see each `metadata.json`) |
 | `core/native/corners/` | [KDE-Rounded-Corners](https://github.com/matinlotfali/KDE-Rounded-Corners) 0.7.2 + `unified-corners.patch` | Matin Lotfaliei and contributors | GPL-3.0 |
 | `core/native/aurorae-pair/` | [Aurorae](https://invent.kde.org/plasma/aurorae) v6.7.5 (native v2 decoration), left button group changed | KDE | GPL-2.0-or-later, MIT, CC0 |
+| `core/native/google-tasks/*.patch` | [libkgapi](https://github.com/KDE/libkgapi), built from the installed package’s matching tag; upstream source downloaded on demand | KDE contributors | LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL |
 | `core/native/powerdevil/ddc-responsive.patch` | [PowerDevil](https://invent.kde.org/plasma/powerdevil) v6.7.5 | KDE | GPL-2.0-or-later |
 | `core/native/appmenu-gtk-module/` | [appmenu-gtk-module-wayland](https://github.com/guiodic/appmenu-gtk-module-wayland) (commit 8963fc2), port of Unity GTK+ module; made resident | guiodic, Canonical | LGPL-3.0 |
 | `core/native/jetbrains-globalmenu/` | [Global Menu and Decoration](https://gitlab.com/JFronny/globalmenu) 1.4.1 incl. dbusmenu4j (`WaylandPanama.java` is a fixed copy) | JFronny | GPL-3.0-or-later |

@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(sg-google-tasks-resync LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+find_package(Qt6 REQUIRED COMPONENTS Core DBus)
+find_package(KPim6Akonadi REQUIRED)
+add_executable(sg-google-tasks-resync resync.cpp)
+target_link_libraries(sg-google-tasks-resync Qt6::Core Qt6::DBus KPim6::AkonadiCore)

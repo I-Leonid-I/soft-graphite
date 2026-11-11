@@ -91,13 +91,7 @@ This effect is maintained on KDE Plasma desktop versions 5.27 to 6.7+ in various
   <img src="https://contrib.rocks/image?repo=matinlotfali/KDE-Rounded-Corners" />
 </a>
 
-<a href="https://www.star-history.com/?repos=matinlotfali%2FKDE-Rounded-Corners&type=date&legend=bottom-right">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=matinlotfali/KDE-Rounded-Corners&type=date&theme=dark&legend=bottom-right&sealed_token=9DUsCWHAS0udGRkKebGxco0iQyQVvzr_x4NRLoE-2mmG4xcoo9dAUYq0noXHpWxG3_FKPTUM59KWUrErzQubEI31rn0PQfRrHKvuioUO--BBKd4IYRTdjQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=matinlotfali/KDE-Rounded-Corners&type=date&legend=bottom-right&sealed_token=9DUsCWHAS0udGRkKebGxco0iQyQVvzr_x4NRLoE-2mmG4xcoo9dAUYq0noXHpWxG3_FKPTUM59KWUrErzQubEI31rn0PQfRrHKvuioUO--BBKd4IYRTdjQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=matinlotfali/KDE-Rounded-Corners&type=date&legend=bottom-right&sealed_token=9DUsCWHAS0udGRkKebGxco0iQyQVvzr_x4NRLoE-2mmG4xcoo9dAUYq0noXHpWxG3_FKPTUM59KWUrErzQubEI31rn0PQfRrHKvuioUO--BBKd4IYRTdjQ" />
- </picture>
-</a>
+
 
 # How to install using unofficial repositories
 

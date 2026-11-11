@@ -1,117 +1,59 @@
 #!/usr/bin/env python3
-"""Resilient window-frame patcher for ChatGPT / Codex desktop client."""
-import json, struct, hashlib, sys, shutil, os, re
+"""Patch native frames in the application bundle, regardless of chunk names."""
+import json
+import re
+import struct
+import sys
 from pathlib import Path
+from asar_edit import edit
+
+OVERLAY = re.compile(r'titleBarStyle:[`\"\x27]hidden[`\"\x27],titleBarOverlay:[A-Za-z0-9_$]+\([A-Za-z0-9_$]+\)')
+
+def patch_source(old):
+    s = old.decode('utf-8')
+    s, frames = OVERLAY.subn('titleBarStyle:"default"', s)
+    # Both minifier comparison orders occur in supported releases.
+    for name, patterns in {
+        'setWindowZoom': [r'\|\|process\.platform===[`\"\x27]linux[`\"\x27]', r'\|\|[`\"\x27]linux[`\"\x27]===process\.platform'],
+        'installApplicationMenuTitleBarOverlaySync': [r'&&process\.platform!==[`\"\x27]linux[`\"\x27]', r'&&[`\"\x27]linux[`\"\x27]!==process\.platform'],
+    }.items():
+        match = re.search(r'\b' + name + r'\s*\([^)]*\)\s*\{', s)
+        if match:
+            end = s.index('}', match.end())
+            chunk = s[match.start():end]
+            for pattern in patterns:
+                chunk = re.sub(pattern, '', chunk)
+            s = s[:match.start()] + chunk + s[end:]
+    s = re.sub(r',([A-Za-z0-9_$]+)\)\{this\.pendingRestoredMaximization\.add', r',0){this.pendingRestoredMaximization.add', s, count=1)
+    s = s.replace('k&&R.once(`ready-to-show`', '0&&R.once(`ready-to-show`', 1)
+    return s.encode('utf-8'), frames
 
 def patch_frame(asar_path):
-    p = Path(asar_path)
-    temp = p.with_suffix('.asar.new')
-    with p.open('rb') as f:
-        hdr = struct.unpack('<4I', f.read(16))
-        j = json.loads(f.read(hdr[3]))
-        base = 8 + hdr[1]
-
-        # Locate main entry script
-        main_entry = None
-        main_name = None
-        build_files = j.get('files', {}).get('.vite', {}).get('files', {}).get('build', {}).get('files', {})
-        for name in build_files:
-            if name.startswith('main-') and name.endswith('.js'):
-                main_entry = build_files[name]
-                main_name = name
-                break
-
-        if not main_entry:
-            def search_main(d, path=""):
-                for k, v in d.items():
-                    if 'files' in v:
-                        res = search_main(v['files'], f"{path}/{k}" if path else k)
-                        if res: return res
-                    elif (k.startswith('main-') or k == 'main.js') and k.endswith('.js'):
-                        return v, f"{path}/{k}" if path else k
-                return None
-            found = search_main(j.get('files', {}))
-            assert found, "Could not find main-*.js in app.asar"
-            main_entry, main_name = found
-
-        f.seek(base + int(main_entry['offset']))
-        old = f.read(main_entry['size'])
-        s = old.decode('utf-8', errors='surrogateescape')
-
-        changes = 0
-
-        # 1. Patch titleBarStyle: 'hidden', titleBarOverlay: ... -> 'default'
-        overlay_pattern = re.compile(r"titleBarStyle:[`\x22\x27]hidden[`\x22\x27],titleBarOverlay:[A-Za-z0-9_$]+\([A-Za-z0-9_$]+\)")
-        matches = list(overlay_pattern.finditer(s))
-        if matches:
-            for m in reversed(matches):
-                chunk = m.group(0)
-                replacement = 'titleBarStyle:`default`'.ljust(len(chunk))
-                s = s[:m.start()] + replacement + s[m.end():]
-                changes += 1
-
-        # 2. Patch setWindowZoom (disable overlay for Linux)
-        for m in re.finditer(r"setWindowZoom\s*\([^)]*\)\s*\{", s):
-            start = m.start()
-            end = s.find("}", start)
-            chunk = s[start:end]
-            m_linux = re.search(r"\|\|process\.platform===[`\x22\x27]linux[`\x22\x27]", chunk)
-            if m_linux:
-                l_start = start + m_linux.start()
-                l_end = start + m_linux.end()
-                s = s[:l_start] + (' ' * len(m_linux.group(0))) + s[l_end:]
-                changes += 1
-                break
-
-        # 3. Patch installApplicationMenuTitleBarOverlaySync (disable overlay for Linux)
-        for m in re.finditer(r"installApplicationMenuTitleBarOverlaySync\s*\([^)]*\)\s*\{", s):
-            start = m.start()
-            end = s.find("}", start)
-            chunk = s[start:end]
-            m_linux = re.search(r"&&process\.platform!==[`\x22\x27]linux[`\x22\x27]", chunk)
-            if m_linux:
-                l_start = start + m_linux.start()
-                l_end = start + m_linux.end()
-                s = s[:l_start] + (' ' * len(m_linux.group(0))) + s[l_end:]
-                changes += 1
-                break
-
-        # 4. Suppress forced maximized on launch
-        m_max = re.search(r",([a-zA-Z0-9_$]+)\)\{this\.pendingRestoredMaximization\.add", s)
-        if m_max:
-            var_name = m_max.group(1)
-            repl = '0'.ljust(len(var_name))
-            target = f",{var_name}){{this.pendingRestoredMaximization.add"
-            replacement = f",{repl}){{this.pendingRestoredMaximization.add"
-            s = s.replace(target, replacement, 1)
-            changes += 1
-        elif 'k&&R.once(`ready-to-show`' in s:
-            s = s.replace('k&&R.once(`ready-to-show`', '0&&R.once(`ready-to-show`', 1)
-            changes += 1
-
-        new = s.encode('utf-8', errors='surrogateescape')
-        assert len(old) == len(new), f"Length mismatch: {len(old)} != {len(new)}"
-
-        integrity = main_entry.get('integrity')
-        if integrity and integrity.get('algorithm') == 'SHA256':
-            integrity['hash'] = hashlib.sha256(new).hexdigest()
-            bs = integrity['blockSize']
-            integrity['blocks'] = [hashlib.sha256(new[i:i+bs]).hexdigest() for i in range(0, len(new), bs)]
-
-        js = json.dumps(j, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
-        aligned = (len(js) + 3) // 4 * 4
-        header = struct.pack('<4I', 4, 8 + aligned, 4 + aligned, len(js)) + js + b'\0' * (aligned - len(js))
-
-        with temp.open('wb') as out:
-            out.write(header)
-            f.seek(base)
-            shutil.copyfileobj(f, out)
-            out.seek(len(header) + int(main_entry['offset']))
-            out.write(new)
-
-        os.chmod(temp, p.stat().st_mode)
-        temp.replace(p)
-        print(json.dumps({'entry': main_name, 'changes': changes}))
+    changes = {}
+    total = 0
+    with Path(asar_path).open('rb') as f:
+        h = struct.unpack('<4I', f.read(16))
+        header = json.loads(f.read(h[3]))
+        base = 8 + h[1]
+        build = header['files']['.vite']['files']['build']['files']
+        for name, entry in build.items():
+            if not name.endswith('.js') or entry.get('unpacked') or 'offset' not in entry:
+                continue
+            f.seek(base + int(entry['offset']))
+            old = f.read(entry['size'])
+            if b'titleBarStyle:' not in old or b'installApplicationMenuTitleBarOverlaySync' not in old:
+                continue
+            new, frames = patch_source(old)
+            if not frames and b'titleBarStyle:"default"' not in old:
+                raise RuntimeError(f'Unrecognized window frame options in {name}')
+            if new != old:
+                changes['.vite/build/' + name] = lambda _old, result=new: result
+            total += 1
+    if total != 1:
+        raise RuntimeError(f'Expected one window manager bundle, found {total}; archive unchanged')
+    if changes:
+        edit(asar_path, changes)
+    print(json.dumps({'entries': list(changes), 'window_manager_bundles': total}))
 
 if __name__ == '__main__':
     patch_frame(sys.argv[1])

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(sg-task-done LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(KPim6Akonadi REQUIRED)
+find_package(KF6CalendarCore REQUIRED)
+add_executable(sg-task-done main.cpp)
+target_link_libraries(sg-task-done Qt6::Core KPim6::AkonadiCore KF6::CalendarCore)

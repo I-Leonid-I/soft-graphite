@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE gui SYSTEM "kpartgui.dtd">
+<gui name="session" version="36">
+ <ActionProperties scheme="Default">
+  <Action name="edit_copy" shortcut="Ctrl+C; Ctrl+Shift+C; Ctrl+Ins"/>
+  <Action name="edit_paste" shortcut="Ctrl+V; Ctrl+Shift+V; Shift+Ins"/>
+ </ActionProperties>
+</gui>

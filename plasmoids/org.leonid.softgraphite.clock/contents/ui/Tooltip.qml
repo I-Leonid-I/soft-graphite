@@ -103,7 +103,7 @@ Item {
         PlasmaComponents.Label {
             id: tooltipSubLabelText
             Layout.maximumWidth: toolTipContentItem.maximumTextWidth
-            text: (root.fullRepresentationItem as CalendarView)?.monthView.todayAuxilliaryText ?? ""
+            text: (root.fullRepresentationItem as CalendarView)?.todayAuxilliaryText ?? ""
             textFormat: Text.PlainText
             opacity: 0.75
             visible: !clocks.visible && text.length > 0

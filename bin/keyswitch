@@ -1,0 +1,16 @@
+#!/bin/sh
+export KEYSWITCH_HUNSPELL_PATH="$HOME/.local/opt/keyswitch/0.70.0/hunspell"
+case "${1:-}" in
+ --help|-h|--version|--diagnose|--enable-wayland-input|--disable-wayland-input) ;;
+ *)
+  if [ "${XDG_SESSION_TYPE:-}" = wayland ]; then
+   if ! /usr/bin/python3 -c 'import os; f=os.open("/dev/uinput",os.O_RDWR|os.O_NONBLOCK); os.close(f)' 2>/dev/null; then
+    message='KeySwitch не запущен: uinput недоступен. После обновления ядра требуется перезагрузка; проверьте правила доступа к вводу.'
+    printf '%s\n' "$message" >&2
+    command -v notify-send >/dev/null 2>&1 && notify-send 'KeySwitch' "$message"
+    exit 1
+   fi
+  fi
+ ;;
+esac
+exec "$HOME/.local/opt/keyswitch/0.70.0/keyswitch" "$@"

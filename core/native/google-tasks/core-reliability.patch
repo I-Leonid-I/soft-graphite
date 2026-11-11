@@ -1,0 +1,247 @@
+--- a/src/core/job.cpp
++++ b/src/core/job.cpp
+@@ -11,6 +11,8 @@
+ #include "authjob.h"
+ #include "debug.h"
+ #include "job_p.h"
++#include "fetchjob.h"
++#include "softgraphitebudget_p.h"
+ #include "networkaccessmanagerfactory_p.h"
+ #include "utils.h"
+ 
+@@ -98,10 +100,6 @@
+         _k_doStart();
+     });
+ 
+-    accessManager = NetworkAccessManagerFactory::instance()->networkAccessManager(q);
+-    connect(accessManager, &QNetworkAccessManager::finished, q, [this](QNetworkReply *reply) {
+-        _k_replyReceived(reply);
+-    });
+ 
+     dispatchTimer = new QTimer(q);
+     connect(dispatchTimer, &QTimer::timeout, q, [this]() {
+@@ -135,6 +133,14 @@
+ 
+ void Job::Private::_k_doStart()
+ {
++    // SOFT_GRAPHITE_JOB_RESOURCES: GoogleResource retains completed Job objects.
++    // Recreate the transport on restart (including the OAuth retry path).
++    if (!accessManager) {
++        accessManager = NetworkAccessManagerFactory::instance()->networkAccessManager(q);
++        connect(accessManager, &QNetworkAccessManager::finished, q, [this](QNetworkReply *reply) {
++            _k_replyReceived(reply);
++        });
++    }
+     isRunning = true;
+     q->aboutToStart();
+     q->start();
+@@ -142,6 +148,12 @@
+ 
+ void Job::Private::_k_doEmitFinished()
+ {
++    // Keep job results available, but release its sockets/thread/event descriptors.
++    if (accessManager) {
++        QObject::disconnect(accessManager, nullptr, q, nullptr);
++        accessManager->deleteLater();
++        accessManager = nullptr;
++    }
+     Q_EMIT q->finished(q);
+ }
+ 
+@@ -166,6 +178,21 @@
+     qCDebug(KGAPIDebug) << "Status code: " << replyCode;
+     FileLogger::self()->logReply(reply, rawData);
+ 
++    const QByteArray errorLower = rawData.toLower();
++    const bool quotaResponse = replyCode == 429 || replyCode == KGAPI2::QuotaExceeded
++        || (replyCode == 403 && (errorLower.contains("quota") || errorLower.contains("ratelimit") || errorLower.contains("rate limit")));
++    if (quotaResponse) {
++        int pause = qMax(1800, reply->rawHeader("Retry-After").toInt());
++        const auto retryDate = QDateTime::fromString(QString::fromLatin1(reply->rawHeader("Retry-After")), Qt::RFC2822Date);
++        if (retryDate.isValid()) pause = qMax(pause, int(QDateTime::currentDateTimeUtc().secsTo(retryDate)));
++        SoftGraphite::pauseRequest(reply->url(), pause);
++        q->setError(KGAPI2::QuotaExceeded);
++        q->setErrorString(tr("API quota/rate limit reached; paused for at least %1 seconds. %2")
++                             .arg(pause).arg(parseErrorMessage(rawData)));
++        q->emitFinished();
++        return;
++    }
++
+     switch (replyCode) {
+     case KGAPI2::NoError:
+     case KGAPI2::OK: /** << OK status (fetched, updated, removed) */
+@@ -262,31 +289,13 @@
+ 
+     case KGAPI2::QuotaExceeded: {
+         if (!q->handleError(replyCode, rawData)) {
+-            qCWarning(KGAPIDebug) << "User quota exceeded.";
+-
+-            // Extend the interval (if possible) and enqueue the request again
+-            int interval = dispatchTimer->interval() / 1000;
+-            if (interval == 0) {
+-                interval = 1;
+-            } else if (interval == 1) {
+-                interval = 2;
+-            } else if ((interval > maxTimeout) && (maxTimeout > 0)) {
+-                const QString msg = parseErrorMessage(rawData);
+-                q->setError(KGAPI2::QuotaExceeded);
+-                q->setErrorString(tr("Maximum quota exceeded. Try again later.\n\nGoogle replied '%1'").arg(msg));
+-                q->emitFinished();
+-                return;
+-            } else {
+-                interval = interval ^ 2;
+-            }
+-            qCDebug(KGAPIDebug) << "Increasing dispatch interval to" << interval * 1000 << "msecs";
+-            dispatchTimer->setInterval(interval * 1000);
+-
+-            const QNetworkRequest request = reply->request();
+-            q->enqueueRequest(request);
+-            if (!dispatchTimer->isActive()) {
+-                dispatchTimer->start();
+-            }
++            // SOFT_GRAPHITE_QUOTA_STOP: surface 429 instead of the upstream
++            // interval ^ 2 sequence (1, 2, 0), which permits immediate retries.
++            qCWarning(KGAPIDebug) << "User quota exceeded; stopping job for" << reply->url().host();
++            q->setError(KGAPI2::QuotaExceeded);
++            q->setErrorString(tr("Maximum quota exceeded. Try again later.\n\nGoogle replied '%1'")
++                                 .arg(parseErrorMessage(rawData)));
++            q->emitFinished();
+             return;
+         }
+         break;
+@@ -351,6 +360,13 @@
+     qCDebug(KGAPIDebug) << q << "Dispatching request to" << r.request.url();
+     FileLogger::self()->logRequest(authorizedRequest, r.rawData);
+ 
++    QString budgetError;
++    if (!SoftGraphite::allowRequest(authorizedRequest.url(), qobject_cast<FetchJob *>(q) != nullptr, budgetError)) {
++        q->setError(KGAPI2::QuotaExceeded);
++        q->setErrorString(budgetError);
++        q->emitFinished();
++        return;
++    }
+     q->dispatchRequest(accessManager, authorizedRequest, r.rawData, r.contentType);
+ 
+     if (requestQueue.isEmpty()) {
+--- /dev/null
++++ b/src/core/softgraphitebudget_p.h
+@@ -0,0 +1,119 @@
++// Local rolling 24-hour request budgets, only in the private Google-resource Core.
++// Reserve small blocks durably BEFORE dispatch; crashes can waste allowance,
++// but cannot reset it or allow an unbounded retry loop. No credentials stored.
++#pragma once
++#include <QDateTime>
++#include <QDir>
++#include <QFile>
++#include <QHash>
++#include <QJsonArray>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QLockFile>
++#include <QSaveFile>
++#include <QStandardPaths>
++#include <QUrl>
++
++namespace SoftGraphite {
++inline QString stateRoot()
++{
++    QString root = qEnvironmentVariable("SOFT_GRAPHITE_BUDGET_TEST_DIR");
++    return root.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation) + QStringLiteral("/soft-graphite") : root;
++}
++inline QJsonObject &cooldowns()
++{
++    static QJsonObject data = [] {
++        QFile file(stateRoot() + QStringLiteral("/google-api-cooldown.json"));
++        if (!file.exists()) return QJsonObject();
++        if (!file.open(QIODevice::ReadOnly)) return QJsonObject{{QStringLiteral("invalid"), true}};
++        QJsonParseError error;
++        auto doc = QJsonDocument::fromJson(file.readAll(), &error);
++        if (error.error != QJsonParseError::NoError || !doc.isObject()) return QJsonObject{{QStringLiteral("invalid"), true}};
++        return doc.object();
++    }();
++    return data;
++}
++inline QString apiName(const QUrl &url)
++{
++    if (url.host() == QLatin1String("www.googleapis.com") && url.path().startsWith(QLatin1String("/tasks/"))) return QStringLiteral("tasks");
++    if (url.host() == QLatin1String("www.googleapis.com") && url.path().startsWith(QLatin1String("/calendar/"))) return QStringLiteral("calendar");
++    if (url.host() == QLatin1String("people.googleapis.com")) return QStringLiteral("people");
++    return {};
++}
++inline void pauseRequest(const QUrl &url, int seconds)
++{
++    const QString api = apiName(url);
++    if (api.isEmpty()) return;
++    auto &data = cooldowns();
++    data[api] = qMax(data.value(api).toInteger(), QDateTime::currentSecsSinceEpoch() + qint64(seconds));
++    QDir().mkpath(stateRoot());
++    QSaveFile file(stateRoot() + QStringLiteral("/google-api-cooldown.json"));
++    if (file.open(QIODevice::WriteOnly)) {
++        file.write(QJsonDocument(data).toJson(QJsonDocument::Compact));
++        file.commit();
++    }
++}
++inline bool allowRequest(const QUrl &url, bool read, QString &reason)
++{
++    QString api;
++    int limit = 0;
++    if (url.host() == QLatin1String("www.googleapis.com") && url.path().startsWith(QLatin1String("/tasks/"))) {
++        api = QStringLiteral("tasks"); limit = read ? 15000 : 1000;
++    } else if (url.host() == QLatin1String("www.googleapis.com") && url.path().startsWith(QLatin1String("/calendar/"))) {
++        api = QStringLiteral("calendar"); limit = read ? 30000 : 1000;
++    } else if (url.host() == QLatin1String("people.googleapis.com")) {
++        api = QStringLiteral("people"); limit = read ? 500 : 500;
++    } else {
++        return true; // OAuth and unrelated services are not charged to these APIs.
++    }
++    const auto &paused = cooldowns();
++    if (paused.value(QStringLiteral("invalid")).toBool() || paused.value(api).toInteger() > QDateTime::currentSecsSinceEpoch()) {
++        reason = QStringLiteral("Local API cooldown active for %1; no request sent").arg(api); return false;
++    }
++    api += read ? QStringLiteral("-read") : QStringLiteral("-write");
++    const qint64 now = QDateTime::currentSecsSinceEpoch();
++    struct Allowance { int remaining = 0; qint64 expires = 0; };
++    static QHash<QString, Allowance> allowances;
++    auto &allowance = allowances[api];
++    if (allowance.remaining > 0 && now < allowance.expires) {
++        --allowance.remaining; return true;
++    }
++    const QString root = stateRoot();
++    if (!QDir().mkpath(root)) { reason = QStringLiteral("Local API budget directory unavailable"); return false; }
++    QLockFile lock(root + QStringLiteral("/google-api-budget.lock"));
++    if (!lock.tryLock(0)) { reason = QStringLiteral("Local API budget busy; no request sent"); return false; }
++    const QString path = root + QStringLiteral("/google-api-budget.json");
++    QFile file(path);
++    QJsonArray previous;
++    if (file.exists()) {
++        if (!file.open(QIODevice::ReadOnly)) { reason = QStringLiteral("Local API budget unreadable"); return false; }
++        QJsonParseError error;
++        const auto document = QJsonDocument::fromJson(file.readAll(), &error);
++        if (error.error != QJsonParseError::NoError || !document.isArray()) {
++            reason = QStringLiteral("Local API budget corrupt; refusing to reset allowance"); return false;
++        }
++        previous = document.array();
++    }
++    QJsonArray active;
++    int used = 0;
++    for (const auto &v : previous) {
++        const auto entry = v.toObject();
++        const qint64 at = entry.value(QStringLiteral("at")).toInteger();
++        if (at > now) { reason = QStringLiteral("Local API budget clock moved backwards"); return false; }
++        if (now - at < 86400) {
++            active.append(entry);
++            if (entry.value(QStringLiteral("api")).toString() == api) used += entry.value(QStringLiteral("count")).toInt();
++        }
++    }
++    if (used >= limit) { reason = QStringLiteral("Local API budget exhausted for %1 (%2/24h); no request sent").arg(api).arg(limit); return false; }
++    const int block = qMin(32, limit - used);
++    active.append(QJsonObject{{QStringLiteral("api"), api}, {QStringLiteral("at"), now}, {QStringLiteral("count"), block}});
++    QSaveFile output(path);
++    if (!output.open(QIODevice::WriteOnly) || output.write(QJsonDocument(active).toJson(QJsonDocument::Compact)) < 0 || !output.commit()) {
++        reason = QStringLiteral("Local API budget could not be saved; no request sent"); return false;
++    }
++    allowance.remaining = block - 1;
++    allowance.expires = now + 86400;
++    return true;
++}
++}

@@ -1,11 +1,11 @@
 'use strict';
-// Adapter for the SHA-256 reviewed ChatGPT 26.1002.52244 Electron menu model.
+// Event-driven adapter for the application-owned Electron menu model.
 // One small, event-driven DBus exporter per main window, no timers in idle.
 const {app, BrowserWindow, Menu, webContents}=require('electron');
 const {spawn}=require('node:child_process');
 const path=require('node:path');
 const tracked=new Map();
-const css='[role="menubar"]:has(#application-menu-trigger-file-menu){display:none!important}';
+const css='[class*="ApplicationMenuTopBar"]:has(#application-menu-trigger-file-menu),[role="menubar"]:has(#application-menu-trigger-file-menu){display:none!important}[class*="ApplicationMenuPageSurfaceLayout"]:has(#application-menu-trigger-file-menu){--app-shell-application-menu-height:0px!important}';
 function attach(win){
  if(tracked.has(win)||win.isDestroyed()||win.getParentWindow()||!win.isResizable()||!win.isMinimizable())return;
  const state={child:null,css:null,ready:false,ids:new Map(),last:null,cssVersion:0,buffer:'',closed:false};tracked.set(win,state);
@@ -49,6 +49,26 @@ function attach(win){
 }
 exports.install=()=>{
  if(process.platform!=='linux'||app.__softGraphiteMenu)return;app.__softGraphiteMenu=true;
+ // Passive startup diagnostics: no timer, retries, window changes, or restarts.
+ const startupAt=Date.now();
+ for(const method of ['quit','exit','relaunch']){
+  const original=app[method];
+  app[method]=function(...args){
+   if(Date.now()-startupAt<60000)console.error('[Soft Graphite startup]',method,new Error('Startup shutdown request').stack);
+   return Reflect.apply(original,this,args);
+  };
+ }
+ for(const event of ['before-quit','will-quit','quit'])app.on(event,()=>{
+  if(Date.now()-startupAt<60000)console.error('[Soft Graphite startup]',event,'uptimeMs='+String(Date.now()-startupAt));
+ });
+ app.on('child-process-gone',(_event,details)=>{
+  if(Date.now()-startupAt<60000)console.error('[Soft Graphite startup] child-process-gone',JSON.stringify(details));
+ });
+ app.on('browser-window-created',(_event,win)=>{
+  win.webContents.on('render-process-gone',(_e,details)=>{
+   if(Date.now()-startupAt<60000)console.error('[Soft Graphite startup] render-process-gone',JSON.stringify(details));
+  });
+ });
  // Preserve application-owned callbacks and menu rebuilding; inspect current items
  // after setApplicationMenu, window focus, or the native AboutToShow request.
  const original=Menu.setApplicationMenu;

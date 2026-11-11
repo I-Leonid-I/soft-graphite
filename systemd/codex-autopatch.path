@@ -3,8 +3,9 @@ Description=Watch for updates to Codex (/usr/lib/chatgpt)
 PartOf=graphical-session.target
 
 [Path]
-PathModified=/usr/lib/chatgpt/resources/app.asar
-PathModified=/usr/lib/chatgpt/ChatGPT
+PathChanged=/usr/lib/chatgpt/resources/app.asar
+PathChanged=/usr/lib/chatgpt/ChatGPT
+PathChanged=/var/lib/pacman/db.lck
 Unit=codex-autopatch.service
 
 [Install]

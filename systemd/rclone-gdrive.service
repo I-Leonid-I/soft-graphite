@@ -1,0 +1,36 @@
+# Soft Graphite rev 52/54: Google Диск как папка ~/GoogleДиск (rclone mount).
+# Кеш: файл живёт сутки после последнего открытия, всего не больше 5 ГБ, проверка раз в 10 мин.
+# Опрос изменений на Диске выключен (--poll-interval 0): список папки обновляется при открытии, если старше 2 мин.
+# rev 54, VPN: AmneziaVPN включается после входа и забирает маршрут (0.0.0.0/1 через amn0) — открытые
+# соединения rclone умирают. Поэтому без keep-alive (каждый запрос — новое соединение по текущему маршруту,
+# ~+60 мс) и короткие тайм-ауты. Страховка от зависания kded6/трея — fs.fuse.default_request_timeout в ядре.
+[Unit]
+Description=Google Диск в ~/GoogleДиск (rclone)
+After=network-online.target
+
+[Service]
+Type=notify
+# Повисшая папка после обрыва подключения ядром («Transport endpoint is not connected»).
+ExecStartPre=-/usr/bin/fusermount3 -uz %h/GoogleДиск
+ExecStartPre=/usr/bin/mkdir -p %h/GoogleДиск
+ExecStart=/usr/bin/rclone mount gdrive: %h/GoogleДиск \
+    --vfs-cache-mode full \
+    --vfs-cache-max-age 24h \
+    --vfs-cache-max-size 5G \
+    --vfs-cache-poll-interval 10m \
+    --dir-cache-time 2m \
+    --poll-interval 0 \
+    --disable-http-keep-alives \
+    --contimeout 10s \
+    --timeout 30s \
+    --low-level-retries 3 \
+    --log-level NOTICE
+ExecStopPost=-/usr/bin/fusermount3 -uz %h/GoogleДиск
+# Общий client_id rclone бывает перегружен (rateLimitExceeded): старт может занять больше 15 с по умолчанию.
+TimeoutStartSec=2min
+# always: после обрыва ядром rclone может выйти и с кодом 0.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

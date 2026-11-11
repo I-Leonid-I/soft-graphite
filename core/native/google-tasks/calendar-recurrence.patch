@@ -1,0 +1,60 @@
+--- a/src/calendar/calendarservice.cpp
++++ b/src/calendar/calendarservice.cpp
+@@ -556,12 +556,27 @@
+             Q_UNUSED(ok)
+             recurrenceRule->setRRule(rec);
+             event->recurrence()->addExRule(recurrenceRule.release());
+-        } else if (recView.left(6) == QLatin1StringView("EXDATE")) {
+-            KCalendarCore::DateList exdates = Private::parseRDate(rec);
+-            event->recurrence()->setExDates(exdates);
+-        } else if (recView.left(5) == QLatin1StringView("RDATE")) {
+-            KCalendarCore::DateList rdates = Private::parseRDate(rec);
+-            event->recurrence()->setRDates(rdates);
++        } else if (recView.left(6) == QLatin1StringView("EXDATE") || recView.left(5) == QLatin1StringView("RDATE")) {
++            // SOFT_GRAPHITE_ICAL_RECURRENCE: RFC5545 uses compact date-times,
++            // unlike the RFC3339 values elsewhere in Google's JSON API.
++            // Let KCalendarCore handle TZID, UTC, DATE and repeated properties.
++            const QString start = event->dtStart().toString(QStringLiteral("yyyyMMdd'T'HHmmss"));
++            const QString zone = QString::fromUtf8(event->dtStart().timeZone().id());
++            const auto parsed = format.fromString(QStringLiteral("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:kgapi-recurrence\r\nDTSTART;TZID=")
++                + zone + QLatin1Char(':') + start + QStringLiteral("\r\n") + rec
++                + QStringLiteral("\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"));
++            if (!parsed) {
++                qCWarning(KGAPIDebug) << "Invalid recurrence date property";
++                continue;
++            }
++            const auto source = parsed->recurrence();
++            if (recView.left(6) == QLatin1StringView("EXDATE")) {
++                for (const auto &date : source->exDates()) event->recurrence()->addExDate(date);
++                for (const auto &dateTime : source->exDateTimes()) event->recurrence()->addExDateTime(dateTime);
++            } else {
++                for (const auto &date : source->rDates()) event->recurrence()->addRDate(date);
++                for (const auto &dateTime : source->rDateTimes()) event->recurrence()->addRDateTime(dateTime);
++            }
+         }
+     }
+ 
+@@ -679,7 +694,7 @@
+     }
+ 
+     if (!dates.isEmpty()) {
+-        recurrence.push_back(QString(QStringLiteral("RDATE;VALUE=DATA:") + dates.join(QLatin1Char(','))));
++        recurrence.push_back(QString(QStringLiteral("RDATE;VALUE=DATE:") + dates.join(QLatin1Char(','))));
+     }
+ 
+     dates.clear();
+@@ -691,6 +706,14 @@
+ 
+     if (!dates.isEmpty()) {
+         recurrence.push_back(QString(QStringLiteral("EXDATE;VALUE=DATE:") + dates.join(QLatin1Char(','))));
++    }
++
++    // Preserve time-specific dates when serializing back to Google.
++    for (const auto &dateTime : event->recurrence()->exDateTimes()) {
++        recurrence.push_back(QString(QStringLiteral("EXDATE:") + dateTime.toUTC().toString(QStringLiteral("yyyyMMdd'T'HHmmss'Z'"))));
++    }
++    for (const auto &dateTime : event->recurrence()->rDateTimes()) {
++        recurrence.push_back(QString(QStringLiteral("RDATE:") + dateTime.toUTC().toString(QStringLiteral("yyyyMMdd'T'HHmmss'Z'"))));
+     }
+ 
+     if (!recurrence.isEmpty()) {

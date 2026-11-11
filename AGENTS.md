@@ -263,3 +263,17 @@ major Plasma upgrade if the window decoration or dock fails to load.
 | Session environment | `~/.config/environment.d/`, `~/.config/plasma-workspace/env/` (= `env/`) |
 
 Design decisions and the reasons behind them: `docs/design.md`.
+
+## Optional calendar, terminal shortcuts and update checker
+
+See [docs/calendar.md](docs/calendar.md) before enabling the clock's PIM/Google
+integration or copying the new optional config fragments. Account setup is local;
+never copy a user's Akonadi database/config, KWallet, rclone credentials, logs or
+calendar payloads. This update deliberately excludes monitor scale/layout changes.
+
+Calendar sync uses native Akonadi CachePolicy (5 minutes), not a persistent Python
+sync daemon. Do not install `soft-graphite-google-sync.service`. The author's
+separate watchdog and its OAuth-dependent resend logic are not shipped here.
+`tools/health-check.sh` and `tools/calendar-sync-health.py` are read-only diagnostics;
+the calendar check assumes an already configured resource and private libraries.
+Do not launch `calendar-policy --apply` or resync tools as a routine health check.

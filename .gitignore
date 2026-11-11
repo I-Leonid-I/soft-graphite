@@ -9,3 +9,25 @@ __pycache__/
 core/native/chatgpt-menu/menu-bridge
 core/native/jetbrains-globalmenu/classes/
 core/native/jetbrains-windows/*.jar
+
+# Private/runtime state is never part of the public theme.
+*.db
+*.db-*
+*.sqlite*
+*.ics
+*.vcf
+*.log
+.env
+.env.*
+rclone.conf
+*token*.json
+*credentials*.json
+*secret*.json
+core/native/google-tasks/source/
+core/native/google-tasks/source-tag
+core/native/google-tasks/lib/
+core/native/google-tasks/built.json
+core/native/google-tasks/build.lock
+core/native/google-tasks/sg-google-tasks-resync
+core/native/task-done/build/
+CLAUDE.md
