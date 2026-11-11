@@ -77,7 +77,17 @@ function snapTarget(w,p){
  if(p.y<=g.y+top)return {name:output.name,kind:'full',rect:{x:g.x,y:g.y,width:g.width,height:g.height}};
  if(p.x<g.x+side||p.x>=g.x+g.width-side){
   const left=p.x<g.x+side,width=Math.floor(g.width/2);
-  return {name:output.name,kind:left?'left':'right',rect:{x:g.x+(left?0:width),y:g.y+top,width:left?width:g.width-width,height:g.height-top}};
+  // Panel regions are global logical coordinates, including output offsets.
+  // The theme's panel surfaces include 10 px transparent floating margins.
+  // Measure the 8 px gap from the visible capsule/dock, not that surface.
+  // Before the first dock report, use its standard 80 px total surface.
+  const panels=regions?[regions.left,regions.right].filter(r=>r&&r.width>0&&r.height>0&&Number.isFinite(r.y)&&r.y>=g.y&&r.y+r.height<g.y+g.height):[];
+  const panelInset=10,gap=8;
+  const snapTop=(panels.length?Math.max.apply(null,panels.map(r=>r.y+r.height)):g.y+52)-panelInset+gap;
+  const dock=regions&&regions.dock;
+  const dockTop=dock&&dock.width>0&&dock.height>0&&Number.isFinite(dock.y)&&dock.y>snapTop+8&&dock.y<=g.y+g.height?dock.y+panelInset:g.y+g.height-80+panelInset;
+  const bottom=Math.max(snapTop+1,dockTop-gap);
+  return {name:output.name,kind:left?'left':'right',rect:{x:g.x+(left?0:width),y:snapTop,width:left?width:g.width-width,height:bottom-snapTop}};
  }
  return null;
 }
