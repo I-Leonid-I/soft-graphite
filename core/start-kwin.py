@@ -2,6 +2,11 @@ import subprocess,json,sys
 from pathlib import Path
 name='soft-graphite-fullscreen'
 base=Path.home()/'.local/share/soft-graphite'
+# Keep the complete user shell override current without a watcher or daemon.
+shell_sync=base/'sync-lockscreen-shell.py'
+if shell_sync.exists():
+    result=subprocess.run([sys.executable,str(shell_sync)],capture_output=True,text=True)
+    print((result.stdout+result.stderr).strip(),flush=True)
 source=Path.home()/'.local/share/kwin/scripts'/name/'contents/code/main.js'
 try: state=json.loads((base/'session-state.json').read_text())
 except (OSError,ValueError): state={}

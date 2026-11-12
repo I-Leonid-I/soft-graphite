@@ -37,6 +37,13 @@ done < <(grep -oP '^\K(softgraphite[^=]*|soft-graphite[^=]*)(?=Enabled=true)' "$
 r=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded soft-graphite-fullscreen 2>/dev/null)
 [[ "$r" == true ]] && ok "скрипт soft-graphite-fullscreen" || bad "скрипт soft-graphite-fullscreen не загружен"
 
+echo "== Геометрия экрана блокировки"
+if [[ -f "$SG/sync-lockscreen-shell.py" ]]; then
+  python3 -B "$SG/sync-lockscreen-shell.py" --check \
+    && ok "пользовательская оболочка актуальна и без ссылок" \
+    || bad "оболочка блокировки требует синхронизации (sync-lockscreen-shell.py)"
+fi
+
 echo "== Нативные плагины: зависимости"
 for so in "$HOME"/.local/lib/qt6/plugins/plasma/applets/*.so \
           "$HOME"/.local/lib/qt6/plugins/kwin/effects/plugins/softgraphite_{corners,layers_v10,outline_resize}.so; do

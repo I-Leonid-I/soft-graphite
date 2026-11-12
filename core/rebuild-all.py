@@ -199,8 +199,16 @@ def sync_jetbrains():
         res = subprocess.run([sys.executable, str(sync_script)], capture_output=True, text=True)
         print((res.stdout + res.stderr).strip())
 
+def sync_lockscreen_shell():
+    script = BASE / "sync-lockscreen-shell.py"
+    if script.exists():
+        result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+        print((result.stdout + result.stderr).strip())
+
+
 def main():
     no_reload = "--no-reload" in sys.argv
+    sync_lockscreen_shell()
     build_layers()
     build_resize_outline()
     build_corners()

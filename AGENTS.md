@@ -52,6 +52,8 @@ mkdir -p "$SG" ~/.local/share/{plasma/look-and-feel,plasma/desktoptheme,plasma/p
 
 # core: helpers, patchers, native sources (scripts find each other by these paths)
 rsync -a core/ "$SG/"
+# Full-size lock screen; complete managed shell copy, never symlink individual files.
+python3 "$SG/sync-lockscreen-shell.py"
 
 # appearance
 rsync -a theme/plasma/look-and-feel/ ~/.local/share/plasma/look-and-feel/
@@ -320,3 +322,16 @@ After changing native sources, install atomically and apply at next login,
 never live-unload a native effect. Test atomic press+motion, not only a held
 outline after a delay. A real application check after next login is still needed
 for this revision; isolated Wayland tests do not prove Codex/XWayland rendering.
+
+Lockscreen sizing and managed shell override: see `docs/lockscreen.md`. Do not
+center fixed service surfaces, even below OverlayLayer, and recheck their role
+in a deferred startup callback. Do not blanket-exclude empty resourceClass: a
+normal client may acquire its class late. Never replace a managed shell copy
+with symlinks; verify both lockscreenmainscript and logoutmainscript via KPackage.
+The complete copy is refreshed by existing login/rebuild paths; no watcher is
+needed. Real authentication/next lock remains a separate visual check.
+
+When changing service-surface filters, ensure fullscreen browsers stay in report:
+compare the window IDs, not only geometries of their intersection. Real fullscreen
+clients may expose moveable=false/resizeable=false. Preserve fullscreen/native-max
+applications in the capability guard and test the resulting panel-controller state.

@@ -13,10 +13,11 @@ pointerRefresh.timeout.connect(()=>callDBus('org.leonid.SoftGraphite','/SoftGrap
 function receiveRegions(data){try{pointerRegions=JSON.parse(data);pointerKey='';refreshColumnAreas();pointerReport();}catch(e){}}
 const syncTimer=new QTimer();syncTimer.singleShot=true;syncTimer.interval=50;syncTimer.timeout.connect(report);
 function sync(){if(!syncTimer.active)syncTimer.start();}
-// Layer-shell overlays (logout screen and similar) are typed as normal windows; they live in
-// KWin's OverlayLayer (9), where application windows never are. Shrinking them into a centred
-// floating window fought their full-screen anchors (black logout screen for seconds).
-function shellOverlay(w){return w.layer>=9;}
+// Layer-shell surfaces can be typed as normal windows below OverlayLayer,
+// including the lock screen. Never apply application geometry to fixed service
+// surfaces; movable fixed-size dialogs and clients with a late class stay eligible.
+// Fullscreen/maximized apps can also report fixed capabilities: keep their panel reports.
+function shellOverlay(w){return w.layer>=9 || (w.moveable===false&&w.resizeable===false&&!w.fullScreen&&w.maximizeMode!==3) || /kscreenlocker|plasma-login-greeter/i.test(String(w.resourceClass));}
 function captureApp(w){return String(w.resourceClass).toLowerCase()==='org.kde.spectacle';}
 function captureWindow(w){return !w.deleted&&captureApp(w)&&String(w.tag)==='region-editor'&&!w.minimized&&!w.hidden;}
 function nativeMediaViewer(w){return String(w.resourceClass).toLowerCase()==='org.telegram.desktop' && /^(Просмотр медиа|Media viewer)$/i.test(String(w.caption));}
@@ -292,7 +293,7 @@ function watch(w,newWindow=false) {
   const startupEnd=new QTimer();startupEnd.singleShot=true;startupEnd.interval=500;
   startupEnd.timeout.connect(()=>{starting=false;centerTimer.stop();});
   function centerNewWindow(){
-   if(!tracked.has(k)||!starting||centerApplying||!startupOutput||w.fullScreen||w.maximizeMode!==0||w.move||w.resize||isColumnTile(w.tile))return;
+   if(!tracked.has(k)||!starting||centerApplying||!startupOutput||shellOverlay(w)||w.fullScreen||w.maximizeMode!==0||w.move||w.resize||isColumnTile(w.tile))return;
    if(w.output&&w.output.name!==startupOutput.name)workspace.sendClientToScreen(w,startupOutput);
    const screen=startupOutput.geometry,g=rect(w),data=saved.get(k);
    const target=floatingGeometry(screen,g);
