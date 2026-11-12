@@ -70,7 +70,7 @@ function validRestore(w, candidate) {
 }
 let activeDrag=null,previewKey='';
 const COLUMN_LAYOUT='soft-graphite-columns';
-const columnRoots=new WeakSet(),columnUpdating=new Set();
+let columnUpdating=false;
 function columnArea(output){
  const g=output.geometry,regions=pointerRegions.find(o=>o.name===output.name);
  const panels=regions?[regions.left,regions.right].filter(r=>r&&r.width>0&&r.height>0&&Number.isFinite(r.y)&&r.y>=g.y&&r.y+r.height<g.y+g.height):[];
@@ -116,8 +116,8 @@ function columnPlan(output,candidate=null,side=-1,requestedSplit=null){
  return {area,low,high,split,left:{x:g.x+8,y:area.y,width:split-12,height:area.height},right:{x:g.x+split+4,y:area.y,width:g.width-split-12,height:area.height}};
 }
 function updateColumnRoot(output,root,plan){
- if(!plan||!isColumnRoot(root)||columnUpdating.has(root))return;
- columnUpdating.add(root);
+ if(!plan||!isColumnRoot(root)||columnUpdating)return;
+ columnUpdating=true;
  try{
   const g=output.geometry,area=plan.area;
   const base=workspace.clientArea(KWin.MaximizeArea,output,workspace.currentDesktopForScreen(output));
@@ -138,39 +138,43 @@ function updateColumnRoot(output,root,plan){
   root.tiles[1].minimumSize={width:Math.max(.001,(g.width-plan.high)/g.width),height:.01};
   const left=root.tiles[0].relativeGeometry;
   if(Math.abs(left.width*g.width-plan.split)>.01)root.tiles[0].relativeGeometry={x:left.x,y:left.y,width:plan.split/g.width,height:left.height};
- }finally{columnUpdating.delete(root);}
+  const edge=left.x+plan.split/g.width,right=root.tiles[1].relativeGeometry;
+  if(Math.abs(right.x-edge)>.00001||Math.abs(right.width-(r.x+r.width-edge))>.00001)
+   root.tiles[1].relativeGeometry={x:edge,y:r.y,width:r.x+r.width-edge,height:r.height};
+  // Native cancellation can move a sibling even when the split hits its limit.
+  // Reassert both frames: an unchanged tile rectangle emits no geometry signal.
+  for(let side=0;side<2;++side){
+   const target={x:g.x+(side===0?8:plan.split+4),y:area.y,width:side===0?plan.split-12:g.width-plan.split-12,height:area.height};
+   for(const w of root.tiles[side].windows){
+    if(!columnInScope(w,output)||expanded(w)||w.move||w.resize)continue;
+    const actual=rect(w);
+    if(['x','y','width','height'].some(k=>Math.abs(actual[k]-target[k])>1/(output.scale||1)+.001))w.frameGeometry=target;
+   }
+  }
+ }finally{columnUpdating=false;}
 }
 function ensureColumns(output,w,side,split){
  const plan=columnPlan(output,w,side,split);if(!plan)return null;
  const root=columnRoot(output);if(!root)return null;
  if(!isColumnRoot(root)){
   // The theme has intentionally disabled stock multi-cell layouts.
-  let count=0;while(root.tiles.length&&count++<64)root.tiles[0].remove();
+  let count=0;while(root.tiles.length&&count++<64){const child=root.tiles[0];if(!child||typeof child.remove!=='function')break;child.remove();}
   root.objectName=COLUMN_LAYOUT;root.minimumSize={width:.01,height:.01};root.padding=8;
   root.split(1); // KWin::Tile::LayoutDirection::Horizontal
  }
  updateColumnRoot(output,root,plan);
- watchColumnRoot(output,root);
  return root.tiles[side];
 }
-function watchColumnRoot(output,root){
- if(!columnRoots.has(root)){
-  columnRoots.add(root);
-  for(const tile of root.tiles){
-   tile.windowsChanged.connect(()=>{if(isColumnRoot(root)&&!columnUpdating.has(root))updateColumnRoot(output,root,columnPlan(output));sync();});
-   tile.relativeGeometryChanged.connect(()=>{if(isColumnRoot(root)&&!columnUpdating.has(root))updateColumnRoot(output,root,columnPlan(output));});
-   tile.windowGeometryChanged.connect(sync);
-  }
- }
-}
 function refreshColumnAreas(){
- for(const output of workspace.screens){const root=columnRoot(output);if(isColumnRoot(root)){watchColumnRoot(output,root);updateColumnRoot(output,root,columnPlan(output));}}
+ for(const output of workspace.screens){const root=columnRoot(output);if(isColumnRoot(root))updateColumnRoot(output,root,columnPlan(output));}
 }
 function startColumnResize(w){
  const data=saved.get(key(w)),tile=w.tile;if(!data||!isColumnTile(tile))return;
- refreshColumnAreas();
  const record={root:tile.parent,side:tile===tile.parent.tiles[0]?0:1,output:w.output.name,desktop:String(workspace.currentDesktopForScreen(w.output).id),geometry:rect(w),restore:data.snapRestore,started:Date.now(),commits:null,query:false};
  data.columnResize=record;
+ const plan=columnPlan(w.output);
+ const peer=tile.parent.tiles[1-record.side].windows.some(v=>columnInScope(v,w.output)&&!expanded(v)&&!v.minimized&&!v.hidden);
+ callDBus('org.leonid.SoftGraphite','/SoftGraphite','org.leonid.SoftGraphite','ResizeColumns',JSON.stringify(plan&&peer?{output:w.output.name,side:record.side,original:record.geometry,left:plan.left,right:plan.right,low:plan.low,high:plan.high}:{}));
  // The existing outline effect cancels the native resize, then untile/commits it.
  // Read its commit counter only at input/geometry events; never poll the effect.
  callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','State',reply=>{
@@ -178,12 +182,12 @@ function startColumnResize(w){
  });
 }
 function finishColumnResize(w){
- const data=saved.get(key(w)),record=data?.columnResize;
+ const id=key(w),data=saved.get(id),record=data?.columnResize;
  if(!record||record.query||isColumnTile(w.tile))return;
  if(w.move||expanded(w)||Date.now()-record.started>120000||w.output.name!==record.output||String(workspace.currentDesktopForScreen(w.output).id)!==record.desktop){data.columnResize=null;return;}
  record.query=true;
  callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','State',reply=>{
-  if(data.columnResize!==record)return;
+  if(saved.get(id)!==data||data.columnResize!==record||w.deleted)return;
   record.query=false;
   try{
    const state=JSON.parse(reply);if(state.active)return;
@@ -300,6 +304,16 @@ function watch(w,newWindow=false) {
   w.interactiveMoveResizeStarted.connect(()=>{
    starting=false;startupEnd.stop();centerTimer.stop();
    if(w.resize){if(isColumnTile(w.tile))startColumnResize(w);else saved.get(k).snapRestore=null;return;}
+   // A synchronous native outline may already have cancelled the built-in
+   // resize before this signal reaches the scripting wrapper.
+   if(!w.move&&!w.resize&&isColumnTile(w.tile)){
+    const data=saved.get(k);
+    callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','State',reply=>{
+     if(saved.get(k)!==data)return;
+     try{const state=JSON.parse(reply);if(state.active&&state.windowId===k)startColumnResize(w);}catch(e){}
+    });
+    return;
+   }
    if(!w.move||w.fullScreen)return;
    saved.get(k).columnResize=null;
    const g=rect(w),p=workspace.cursorPos,data=saved.get(k),restore=data.snapRestore||g;
@@ -389,7 +403,7 @@ function pointerReport(){
 workspace.cursorPosChanged.connect(()=>{updateSnapPreview();pointerReport();});
 workspace.windowList().forEach(w=>watch(w,false));pointerReport();
 workspace.windowAdded.connect(w=>{watch(w,true);sync();});
-workspace.windowRemoved.connect(w=>{if(activeDrag?.window===w){activeDrag=null;showPreview(null);}const k=key(w);tracked.delete(k);saved.delete(k);busy.delete(k);
+workspace.windowRemoved.connect(w=>{if(activeDrag?.window===w){activeDrag=null;showPreview(null);}const k=key(w),data=saved.get(k);if(data)data.columnResize=null;tracked.delete(k);saved.delete(k);busy.delete(k);
  for(const timer of windowTimers.get(k)||[]){timer.stop();}
  windowTimers.delete(k);sync();});
 workspace.windowActivated.connect(report);
@@ -403,5 +417,5 @@ registerUserActionsMenu(w=>({text:'Мягкий графит',items:[{text:expan
 sync();
 
 // Remove the former Shift-drag custom columns as well as electric corner tiling.
-function clearOtherLayouts(){for(const screen of workspace.screens){const root=workspace.rootTile(screen,workspace.currentDesktopForScreen(screen));if(root&&!isColumnRoot(root)){let count=0;while(root.tiles.length&&count++<64)root.tiles[0].remove();}}}
+function clearOtherLayouts(){for(const screen of workspace.screens){const root=workspace.rootTile(screen,workspace.currentDesktopForScreen(screen));if(root&&!isColumnRoot(root)){let count=0;while(root.tiles.length&&count++<64){const child=root.tiles[0];if(!child||typeof child.remove!=='function')break;child.remove();}}}}
 clearOtherLayouts();workspace.screensChanged.connect(clearOtherLayouts);workspace.currentDesktopChanged.connect(clearOtherLayouts);

@@ -13,13 +13,26 @@
 #include <QRasterWindow>
 #include <QPainter>
 #include <QSurfaceFormat>
+#include <cmath>
 #include <LayerShellQt/Window>
 class SnapPreview:public QRasterWindow {
+ QList<QRect> outlines;
 protected:
- void paintEvent(QPaintEvent*) override {QPainter p(this);p.setCompositionMode(QPainter::CompositionMode_Source);p.fillRect(QRect(QPoint(),size()),Qt::transparent);p.setCompositionMode(QPainter::CompositionMode_SourceOver);p.setRenderHint(QPainter::Antialiasing);p.setPen(QPen(QColor(184,198,214,150),1.4));p.setBrush(QColor(110,125,145,46));p.drawRoundedRect(QRectF(5,5,width()-10,height()-10),14,14);}
+ void paintEvent(QPaintEvent*) override {
+  QPainter p(this);p.setCompositionMode(QPainter::CompositionMode_Source);p.fillRect(QRect(QPoint(),size()),Qt::transparent);
+  p.setCompositionMode(QPainter::CompositionMode_SourceOver);p.setRenderHint(QPainter::Antialiasing);
+  p.setPen(QPen(QColor(184,198,214,150),1.4));p.setBrush(QColor(110,125,145,46));
+  for(const QRect&r:outlines)p.drawRoundedRect(QRectF(r).adjusted(5,5,-5,-5),14,14);
+ }
 public:
- SnapPreview(){setFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowTransparentForInput|Qt::WindowDoesNotAcceptFocus);QSurfaceFormat f=format();f.setAlphaBufferSize(8);setFormat(f);setTitle("Soft Graphite snap preview");auto l=LayerShellQt::Window::get(this);l->setScope("soft-graphite-snap-preview");l->setLayer(LayerShellQt::Window::LayerOverlay);l->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);l->setExclusiveZone(-1);l->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorLeft);}
- void present(QScreen*screen,QRect rect){auto l=LayerShellQt::Window::get(this);if(this->screen()!=screen){hide();setScreen(screen);l->setScreen(screen);}l->setMargins(QMargins(rect.x()-screen->geometry().x(),rect.y()-screen->geometry().y(),0,0));l->setDesiredSize(rect.size());resize(rect.size());show();requestUpdate();}
+ SnapPreview(){setFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowTransparentForInput|Qt::WindowDoesNotAcceptFocus);QSurfaceFormat f=format();f.setAlphaBufferSize(8);setFormat(f);setTitle("Soft Graphite snap preview");auto l=LayerShellQt::Window::get(this);l->setScope("utility");l->setLayer(LayerShellQt::Window::LayerOverlay);l->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);l->setExclusiveZone(-1);l->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorLeft);}
+ void present(QScreen*screen,const QList<QRect>&rects){
+  QRect bounds;for(const QRect&r:rects)bounds=bounds.united(r);
+  outlines.clear();for(const QRect&r:rects)outlines.append(r.translated(-bounds.topLeft()));
+  auto l=LayerShellQt::Window::get(this);if(this->screen()!=screen){hide();setScreen(screen);l->setScreen(screen);}
+  l->setMargins(QMargins(bounds.x()-screen->geometry().x(),bounds.y()-screen->geometry().y(),0,0));
+  l->setDesiredSize(bounds.size());resize(bounds.size());show();update();
+ }
 };
 class Bridge:public QObject {
  Q_OBJECT
@@ -34,6 +47,7 @@ class Bridge:public QObject {
  QTimer saveTimer;
  QTimer panelTimer;
  SnapPreview preview;QString previewOutput,previewKind;QRect previewRect;
+ QList<QRect> previewRects;QJsonObject resizeColumns;
  QPoint pointer;
  quint64 pointerCalls=0,publishes=0,writes=0;
  QString flagKey(const QString&n,const QString&r){return n+"/"+r;}
@@ -61,7 +75,7 @@ class Bridge:public QObject {
   }
  }
  QJsonObject rect(QRect r)const{return {{"x",r.x()},{"y",r.y()},{"width",r.width()},{"height",r.height()}};}
- QRect fromRect(QJsonObject o){return {o["x"].toInt(),o["y"].toInt(),o["width"].toInt(),o["height"].toInt()};}
+ QRect fromRect(QJsonObject o){return {qRound(o["x"].toDouble()),qRound(o["y"].toDouble()),qRound(o["width"].toDouble()),qRound(o["height"].toDouble())};}
  QJsonObject panelState()const{QJsonObject p;for(auto it=screens.cbegin();it!=screens.cend();++it)p[it.key()]=QJsonObject{{"left",rect(it->left)},{"right",rect(it->right)},{"dock",rect(it->dock)}};return p;}
  void scheduleSave(){saveTimer.start();}
  void save(){auto bytes=QJsonDocument(QJsonObject{{"windows",restoreWindows},{"panels",panelState()}}).toJson(QJsonDocument::Compact);if(bytes==persisted.toUtf8())return;QSaveFile f(base+"/session-state.json");if(f.open(QIODevice::WriteOnly)){f.write(bytes);if(f.commit()){persisted=QString::fromUtf8(bytes);++writes;}}}
@@ -86,12 +100,38 @@ public slots:
  void Geometry(QString n,QString role,int x,int y,int w,int h){
   if(!screens.contains(n)||w<=0||h<=0)return;auto&s=screens[n];QRect r(x,y,w,h);QRect*target=role=="dock"?&s.dock:role=="left"?&s.left:role=="right"?&s.right:nullptr;if(!target||*target==r)return;*target=r;scheduleSave();
  }
- void Preview(QString output,QString kind,int x,int y,int width,int height){
-  previewOutput=output;previewKind=kind;previewRect=QRect(x,y,width,height);
-  if(kind.isEmpty()||width<=0||height<=0||screens.value(output).capture){preview.hide();return;}
-  for(auto screen:qGuiApp->screens())if(screen->name()==output){preview.present(screen,previewRect);return;}
+ // Event-scoped metadata from the KWin script. Cleared when the native outline ends.
+ void ResizeColumns(QString data){
+  resizeColumns=QJsonDocument::fromJson(data.toUtf8()).object();
+  // Native capture can publish its first rectangle before the script's metadata.
+  if(preview.isVisible()&&previewKind=="resize")Preview(previewOutput,previewKind,previewRect.x(),previewRect.y(),previewRect.width(),previewRect.height());
  }
- QString PreviewState()const{return QJsonDocument(QJsonObject{{"output",previewOutput},{"kind",previewKind},{"visible",preview.isVisible()},{"rect",rect(previewRect)}}).toJson(QJsonDocument::Compact);}
+ void Preview(QString output,QString kind,int x,int y,int width,int height){
+  previewOutput=output;previewKind=kind;previewRect=QRect(x,y,width,height);previewRects={previewRect};
+  if(kind.isEmpty()||width<=0||height<=0||screens.value(output).capture){preview.hide();previewRects.clear();resizeColumns={};return;}
+  if(kind!="resize")resizeColumns={};
+  if(kind=="resize"&&resizeColumns["output"].toString()==output){
+   const QRect original=fromRect(resizeColumns["original"].toObject());
+   const int side=resizeColumns["side"].toInt(-1);
+   const auto same=[](int a,int b){return qAbs(a-b)<=1;};
+   const bool inner=original.isValid()&&(side==0||side==1)&&same(y,original.y())&&same(height,original.height())&&
+    (side==0?same(x,original.x()):same(x+width,original.x()+original.width()));
+   QRect left=fromRect(resizeColumns["left"].toObject()),right=fromRect(resizeColumns["right"].toObject());
+   const int low=std::ceil(resizeColumns["low"].toDouble()),high=std::floor(resizeColumns["high"].toDouble());
+   if(inner&&left.isValid()&&right.isValid()&&low<=high){
+    const int base=left.x()-8,total=right.x()+right.width()+8-base;
+    const int split=qBound(low,(side==0?x+width+4:x-4)-base,high);
+    left.setWidth(split-12);right.setX(base+split+4);right.setWidth(total-split-12);
+    if(left.isValid()&&right.isValid()){previewRects={left,right};previewRect=side==0?left:right;}
+   }
+  }
+  for(auto screen:qGuiApp->screens())if(screen->name()==output){preview.present(screen,previewRects);return;}
+  preview.hide();previewRects.clear();resizeColumns={};
+ }
+ QString PreviewState()const{
+  QJsonArray a;for(const QRect&r:previewRects)a.append(rect(r));
+  return QJsonDocument(QJsonObject{{"output",previewOutput},{"kind",previewKind},{"visible",preview.isVisible()},{"rect",rect(previewRect)},{"rects",a},{"paired",previewRects.size()==2}}).toJson(QJsonDocument::Compact);
+ }
  QString PointerConfig()const{QJsonArray a;for(auto it=screens.cbegin();it!=screens.cend();++it){auto o=rect(it->bounds);o["name"]=it.key();o["full"]=it->full&&!it->capture;o["capture"]=it->capture;o["target"]=it->target;o["left"]=rect(it->left);o["right"]=rect(it->right);o["dock"]=rect(it->dock);a.append(o);}return QJsonDocument(a).toJson(QJsonDocument::Compact);}
  QString State()const{return state;}
  QString Stats()const{return QJsonDocument(QJsonObject{{"pointerCalls",double(pointerCalls)},{"publishes",double(publishes)},{"writes",double(writes)}}).toJson(QJsonDocument::Compact);}

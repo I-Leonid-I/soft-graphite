@@ -44,6 +44,9 @@ class GraphiteOutline final : public Effect {
   QRectF r=original;r.setWidth(size.width());r.setHeight(size.height());
   if(left())r.moveRight(original.right());if(top())r.moveBottom(original.bottom());
   r=QRectF(r.toRect());
+  // Resizing one axis must not round the other axis on fractional outputs.
+  if(!left()&&!right()){r.setX(original.x());r.setWidth(original.width());}
+  if(!top()&&!bottom()){r.setY(original.y());r.setHeight(original.height());}
   if(r==pending)return;pending=r;++updates;if(!previewTimer.isActive())previewTimer.start();
  }
  void finish(bool commit){
@@ -75,7 +78,7 @@ class GraphiteOutline final : public Effect {
    if(!w->isInteractiveResize())return;
    const QPointer<Window> guard=w;
    const QRectF initial(w->moveResizeGeometry());const auto anchor=w->interactiveMoveResizeAnchor();const auto edge=w->interactiveMoveResizeGravity();
-   QTimer::singleShot(0,this,[this,guard,initial,anchor,edge]{if(guard)begin(guard,initial,anchor,edge);});
+   if(guard)begin(guard,initial,anchor,edge);
   });
  }
 public:
@@ -100,7 +103,7 @@ public:
   QPointF p=last;if(e->key()==Qt::Key_Left)p.rx()-=step;else if(e->key()==Qt::Key_Right)p.rx()+=step;else if(e->key()==Qt::Key_Up)p.ry()-=step;else if(e->key()==Qt::Key_Down)p.ry()+=step;else return;change(p);
  }
 public Q_SLOTS:
- QString State()const{auto rect=[](QRectF r){return QJsonObject{{"x",r.x()},{"y",r.y()},{"width",r.width()},{"height",r.height()}};};return QJsonDocument(QJsonObject{{"active",capturing},{"originX",origin.x()},{"originY",origin.y()},{"original",rect(original)},{"target",rect(pending)},{"commits",commits},{"cancellations",cancellations},{"previewUpdates",updates}}).toJson(QJsonDocument::Compact);}
+ QString State()const{auto rect=[](QRectF r){return QJsonObject{{"x",r.x()},{"y",r.y()},{"width",r.width()},{"height",r.height()}};};return QJsonDocument(QJsonObject{{"active",capturing},{"windowId",target?target->internalId().toString():QString()},{"originX",origin.x()},{"originY",origin.y()},{"original",rect(original)},{"target",rect(pending)},{"commits",commits},{"cancellations",cancellations},{"previewUpdates",updates}}).toJson(QJsonDocument::Compact);}
 };
 KWIN_EFFECT_FACTORY_SUPPORTED(GraphiteOutline,"metadata.json",return true;)
 }

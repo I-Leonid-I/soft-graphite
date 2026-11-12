@@ -97,3 +97,21 @@ assert.equal(context.snapTarget(right, {x:g.x+g.width-1,y:200}).rect.width, 948)
 assert.equal(context.snapTarget(left, {x:g.x,y:200}, true).rect.width, 1140);
 assert.equal(context.snapTarget(right, {x:g.x+g.width-1,y:200}, true).rect.width, 756);
 console.log('PASS: ordinary snap resets half; restore preserves custom separator.');
+
+// A late D-Bus reply must not touch a window removed while resizing.
+context.saved = new Map();
+context.key = w => w.id;
+const closing = {id:'closing',output,move:false,fullScreen:false,maximizeMode:0,tile:null};
+const pending = {geometry:{x:1544,y:50,width:948,height:952},output:output.name,desktop:desktop.id,started:Date.now(),commits:1,query:false};
+const closingData = {columnResize:pending};
+context.saved.set(closing.id,closingData);
+calls = [];
+context.finishColumnResize(closing);
+assert.equal(pending.query,true);
+const lateReply = calls[0].at(-1);
+context.saved.delete(closing.id);
+let deletedWindowReads = 0;
+context.rect = () => {++deletedWindowReads; throw new Error('deleted native window');};
+lateReply(JSON.stringify({active:false,commits:2,original:pending.geometry,target:pending.geometry}));
+assert.equal(deletedWindowReads,0);
+console.log('PASS: late resize reply ignores removed windows.');

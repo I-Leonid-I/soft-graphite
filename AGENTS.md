@@ -285,8 +285,38 @@ The fullscreen script owns a native KWin CustomTile root named
 Ordinary edge snapping resets to halves (clamped to client size hints); fullscreen
 restore preserves a resized separator. The existing outline effect captures the
 resize: JS reads `/SoftGraphiteResize` State only at interaction/geometry events
-and links confirmed inner-edge commits. During drag the outline is shown; both
-window sizes update on release. Do not add polling or reload native effects.
-Qt's scripting wrapper does not expose `root.destroyed`; use weak ownership for
-watched roots. Always test the first snap on a fresh root, both outputs, Esc,
+and links confirmed inner-edge commits. At resize start JS sends `ResizeColumns`
+metadata to the edge helper; its existing overlay shows BOTH constrained outlines.
+`PreviewState` exposes `rects` and `paired`; actual windows update on release.
+No native-effect reload, new process, polling or timer is needed. Clear metadata
+on finish/cancel/ordinary snap; capture hides the entire overlay. Parse JSON geometry with qRound(toDouble),
+not QJsonValue::toInt (a fractional value can otherwise become zero).
+Do not keep native tiles in Set/WeakSet or connect tile geometry signals back to
+synchronous root writes. Refresh on existing snap/resize/region events with a
+reentry flag. Reassert both frames at limits, with a one-device-pixel tolerance
+for fractional Wayland scaling. Ignore late replies after window removal.
+Qt's scripting wrapper does not expose `root.destroyed`. Always test the first snap on a fresh root, both outputs, Esc,
 min/max hints and fullscreen return. Pure geometry: `node tools/test-snap-target.cjs`.
+
+After the rev79 live-session crash, exercise lifecycle/resize stress in a PRIVATE
+D-Bus + virtual KWin first, never using /dev/uinput or the user's session bus for
+isolated tests. Enable the script in that isolated config. Verify first snap and
+resize, reopen, both edges/scales, size limits, Esc, target destruction during
+resize, fullscreen/native maximize + JS reload, then a short physical check.
+
+Resize preview must use `QRasterWindow::update()` when only the painted seam
+changes; `requestUpdate()` alone leaves the backing store unchanged. Its
+LayerShell scope is `utility` (LayerOverlay): a custom scope defaults to Normal
+and makes stock scale/fade animate the preview itself. Verify multiple held
+positions and the first frames of a new resize, including a quick repeated
+resize. `tools/test-linked-resize.cjs` checks the shared animation clock.
+
+Native outline startup is synchronous in `interactiveMoveResizeStarted`; a zero
+timer lets the first real resize/configure slip through before cancellation.
+The scripting wrapper may receive started after cancellation: its fallback must
+validate the native State active/windowId and current saved record before
+touching the window. A horizontal outline must preserve fractional height.
+After changing native sources, install atomically and apply at next login,
+never live-unload a native effect. Test atomic press+motion, not only a held
+outline after a delay. A real application check after next login is still needed
+for this revision; isolated Wayland tests do not prove Codex/XWayland rendering.
