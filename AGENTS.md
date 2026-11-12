@@ -277,3 +277,16 @@ separate watchdog and its OAuth-dependent resend logic are not shipped here.
 `tools/health-check.sh` and `tools/calendar-sync-health.py` are read-only diagnostics;
 the calendar check assumes an already configured resource and private libraries.
 Do not launch `calendar-policy --apply` or resync tools as a routine health check.
+
+## Linked side columns
+
+The fullscreen script owns a native KWin CustomTile root named
+`soft-graphite-columns` per output/desktop, with two horizontal tiles and padding 8.
+Ordinary edge snapping resets to halves (clamped to client size hints); fullscreen
+restore preserves a resized separator. The existing outline effect captures the
+resize: JS reads `/SoftGraphiteResize` State only at interaction/geometry events
+and links confirmed inner-edge commits. During drag the outline is shown; both
+window sizes update on release. Do not add polling or reload native effects.
+Qt's scripting wrapper does not expose `root.destroyed`; use weak ownership for
+watched roots. Always test the first snap on a fresh root, both outputs, Esc,
+min/max hints and fullscreen return. Pure geometry: `node tools/test-snap-target.cjs`.
