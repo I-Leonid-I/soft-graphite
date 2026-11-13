@@ -335,3 +335,14 @@ When changing service-surface filters, ensure fullscreen browsers stay in report
 compare the window IDs, not only geometries of their intersection. Real fullscreen
 clients may expose moveable=false/resizeable=false. Preserve fullscreen/native-max
 applications in the capability guard and test the resulting panel-controller state.
+
+
+Paired inner-edge resize preview ignores application min/max until release.
+Send identical event-scoped metadata to helper.ResizeColumns and native.Columns;
+validate window identity, original frame and edge before enabling free mode.
+The script callback may precede native capture: defer that event once, never poll.
+Clamp the shared divider BEFORE the native configure, then preserve the paired
+240ms animation. CustomTile rejects neighbour widths <= minimumSize: keep the
+native tile guard 1e-6 below the exact plan bounds, enforced at release. Test
+exact min/max commits, repeated dragging beyond a minimum, reversal, Escape,
+peer/target destruction, fractional outputs and unchanged floating resize.

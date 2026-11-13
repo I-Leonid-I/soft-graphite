@@ -135,8 +135,10 @@ function updateColumnRoot(output,root,plan){
   }
   root.layoutDirection=1;
   root.padding=8;
-  root.tiles[0].minimumSize={width:Math.max(.001,plan.low/g.width),height:.01};
-  root.tiles[1].minimumSize={width:Math.max(.001,(g.width-plan.high)/g.width),height:.01};
+  // CustomTile rejects a neighbour equal to minimumSize (strict <= check).
+  // Keep its guard subpixel below the exact limits enforced by columnPlan.
+  root.tiles[0].minimumSize={width:Math.max(.001,plan.low/g.width-1e-6),height:.01};
+  root.tiles[1].minimumSize={width:Math.max(.001,(g.width-plan.high)/g.width-1e-6),height:.01};
   const left=root.tiles[0].relativeGeometry;
   if(Math.abs(left.width*g.width-plan.split)>.01)root.tiles[0].relativeGeometry={x:left.x,y:left.y,width:plan.split/g.width,height:left.height};
   const edge=left.x+plan.split/g.width,right=root.tiles[1].relativeGeometry;
@@ -174,8 +176,10 @@ function startColumnResize(w){
  const record={root:tile.parent,side:tile===tile.parent.tiles[0]?0:1,output:w.output.name,desktop:String(workspace.currentDesktopForScreen(w.output).id),geometry:rect(w),restore:data.snapRestore,started:Date.now(),commits:null,query:false};
  data.columnResize=record;
  const plan=columnPlan(w.output);
- const peer=tile.parent.tiles[1-record.side].windows.some(v=>columnInScope(v,w.output)&&!expanded(v)&&!v.minimized&&!v.hidden);
- callDBus('org.leonid.SoftGraphite','/SoftGraphite','org.leonid.SoftGraphite','ResizeColumns',JSON.stringify(plan&&peer?{output:w.output.name,side:record.side,original:record.geometry,left:plan.left,right:plan.right,low:plan.low,high:plan.high}:{}));
+ record.peerIds=tile.parent.tiles[1-record.side].windows.filter(v=>columnInScope(v,w.output)&&!expanded(v)&&!v.minimized&&!v.hidden).map(key);
+ const columns=JSON.stringify(plan&&record.peerIds.length?{freeDivider:true,windowId:key(w),output:w.output.name,side:record.side,original:record.geometry,left:plan.left,right:plan.right,low:plan.low,high:plan.high}:{});
+ callDBus('org.leonid.SoftGraphite','/SoftGraphite','org.leonid.SoftGraphite','ResizeColumns',columns);
+ callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','Columns',columns);
  // The existing outline effect cancels the native resize, then untile/commits it.
  // Read its commit counter only at input/geometry events; never poll the effect.
  callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','State',reply=>{
@@ -405,6 +409,11 @@ workspace.cursorPosChanged.connect(()=>{updateSnapPreview();pointerReport();});
 workspace.windowList().forEach(w=>watch(w,false));pointerReport();
 workspace.windowAdded.connect(w=>{watch(w,true);sync();});
 workspace.windowRemoved.connect(w=>{if(activeDrag?.window===w){activeDrag=null;showPreview(null);}const k=key(w),data=saved.get(k);if(data)data.columnResize=null;tracked.delete(k);saved.delete(k);busy.delete(k);
+ for(const value of saved.values())if(value.columnResize?.peerIds?.includes(k)){
+  value.columnResize=null;
+  callDBus('org.kde.KWin','/SoftGraphiteResize','org.leonid.GraphiteOutline','Columns','{}');
+  callDBus('org.leonid.SoftGraphite','/SoftGraphite','org.leonid.SoftGraphite','ResizeColumns','{}');
+ }
  for(const timer of windowTimers.get(k)||[]){timer.stop();}
  windowTimers.delete(k);sync();});
 workspace.windowActivated.connect(report);

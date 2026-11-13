@@ -115,3 +115,43 @@ context.rect = () => {++deletedWindowReads; throw new Error('deleted native wind
 lateReply(JSON.stringify({active:false,commits:2,original:pending.geometry,target:pending.geometry}));
 assert.equal(deletedWindowReads,0);
 console.log('PASS: late resize reply ignores removed windows.');
+
+
+// Paired gestures carry the same free-preview metadata to the helper and native effect.
+context.rect = w => ({...w.frameGeometry});
+left.id='left';right.id='right';left.tile=nativeRoot.tiles[0];
+for(const tile of nativeRoot.tiles)tile.parent=nativeRoot;
+context.saved.set(left.id,{snapRestore:{width:640,height:434}});
+calls=[];context.startColumnResize(left);
+const helperCall=calls.find(c=>c[3]==='ResizeColumns'), nativeCall=calls.find(c=>c[3]==='Columns');
+assert(helperCall && nativeCall);assert.equal(helperCall[4],nativeCall[4]);
+const metadata=JSON.parse(nativeCall[4]);
+assert.equal(metadata.freeDivider,true);assert.equal(metadata.windowId,'left');
+assert.equal(metadata.side,0);assert(metadata.low<=metadata.high);
+assert.equal(context.saved.get('left').columnResize.peerIds.join(','),'right');
+right.minimized=true;calls=[];context.startColumnResize(left);
+assert.equal(calls.find(c=>c[3]==='Columns')[4],'{}');
+right.minimized=false;
+console.log('PASS: free divider metadata shared with native/helper; no peer references or free mode for hidden peers.');
+
+// Model CustomTile's strict neighbour-minimum check at the exact release boundary.
+const boundaryRoot={objectName:'soft-graphite-columns',layoutDirection:1,padding:8,
+ relativeGeometry:{x:0,y:46/1080,width:1,height:960/1080},tiles:[]};
+for(let i=0;i<2;i++){
+ let geometry={x:i/2,y:46/1080,width:.5,height:960/1080};
+ boundaryRoot.tiles.push({windows:[],minimumSize:{width:.01,height:.01},
+  get relativeGeometry(){return {...geometry};},
+  set relativeGeometry(value){
+   const neighbour=boundaryRoot.tiles[1-i];
+   const neighbourWidth=i===0?1-value.width:value.x;
+   if(neighbour && neighbourWidth<=neighbour.minimumSize.width)return;
+   geometry={...value};
+  }});
+}
+context.workspace.clientArea=()=>g;context.KWin={MaximizeArea:0};
+for(const split of [612,1208,960,612]){
+ context.updateColumnRoot(output,boundaryRoot,{area:{y:50,height:952},low:612,high:1208,split});
+ assert(Math.abs(boundaryRoot.tiles[0].relativeGeometry.width*g.width-split)<1e-6);
+ assert(Math.abs(boundaryRoot.tiles[1].relativeGeometry.x*g.width-split)<1e-6);
+}
+console.log('PASS: exact min/max split is accepted by the native strict-neighbour guard.');

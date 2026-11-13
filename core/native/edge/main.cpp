@@ -22,7 +22,11 @@ protected:
   QPainter p(this);p.setCompositionMode(QPainter::CompositionMode_Source);p.fillRect(QRect(QPoint(),size()),Qt::transparent);
   p.setCompositionMode(QPainter::CompositionMode_SourceOver);p.setRenderHint(QPainter::Antialiasing);
   p.setPen(QPen(QColor(184,198,214,150),1.4));p.setBrush(QColor(110,125,145,46));
-  for(const QRect&r:outlines)p.drawRoundedRect(QRectF(r).adjusted(5,5,-5,-5),14,14);
+  for(const QRect&r:outlines){
+   const qreal inset=qMin(5.0,qMax(0.0,(r.width()-1)/2.0));
+   const QRectF box=QRectF(r).adjusted(inset,5,-inset,-5);
+   p.drawRoundedRect(box,qMin(14.0,box.width()/2),14);
+  }
  }
 public:
  SnapPreview(){setFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowTransparentForInput|Qt::WindowDoesNotAcceptFocus);QSurfaceFormat f=format();f.setAlphaBufferSize(8);setFormat(f);setTitle("Soft Graphite snap preview");auto l=LayerShellQt::Window::get(this);l->setScope("utility");l->setLayer(LayerShellQt::Window::LayerOverlay);l->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);l->setExclusiveZone(-1);l->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorLeft);}
@@ -120,7 +124,7 @@ public slots:
    const int low=std::ceil(resizeColumns["low"].toDouble()),high=std::floor(resizeColumns["high"].toDouble());
    if(inner&&left.isValid()&&right.isValid()&&low<=high){
     const int base=left.x()-8,total=right.x()+right.width()+8-base;
-    const int split=qBound(low,(side==0?x+width+4:x-4)-base,high);
+    const int split=qBound(resizeColumns["freeDivider"].toBool()?13:low,(side==0?x+width+4:x-4)-base,resizeColumns["freeDivider"].toBool()?total-13:high);
     left.setWidth(split-12);right.setX(base+split+4);right.setWidth(total-split-12);
     if(left.isValid()&&right.isValid()){previewRects={left,right};previewRect=side==0?left:right;}
    }
