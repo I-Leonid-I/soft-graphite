@@ -85,12 +85,27 @@ Item {
         for (const child of item.children) height = Math.max(height, naturalBodyHeight(child, depth + 1));
         return height;
     }
-    property real graphiteNaturalHeight: 210
+    // Each applet owns its last settled height. Reusing the previous applet's
+    // height opens e.g. audio at the network size until the debounce expires.
+    property var naturalHeights: ({})
+    readonly property string naturalHeightKey: systemTrayState.activeApplet?.plasmoid.pluginName ?? ""
+    readonly property bool stableListViewport: naturalHeightKey === "org.kde.plasma.networkmanagement" || naturalHeightKey === "org.kde.plasma.volume"
+    readonly property real graphiteNaturalHeight: naturalHeights[naturalHeightKey] ?? 210
+    function rememberNaturalHeight(value) {
+        if (!naturalHeightKey || value <= 0 || naturalHeights[naturalHeightKey] === value) return;
+        // These applets have scrollable lists. Once measured, keep their viewport
+        // stable when scans/devices change instead of resizing the outer window.
+        if (stableListViewport && (naturalHeights[naturalHeightKey] !== undefined || value <= 210)) return;
+        const updated = Object.assign({}, naturalHeights);
+        updated[naturalHeightKey] = value;
+        naturalHeights = updated;
+    }
     function measureNaturalHeight() {
+        if (stableListViewport && naturalHeights[naturalHeightKey] !== undefined) return naturalHeights[naturalHeightKey];
         // A StackView may expose the new item's placeholder size before the
         // representation becomes visible. Keep the last natural size until
         // the real page has completed its first layout pass.
-        if (!representation || !representation.visible) return 0;
+        if (!representation || !representation.visible || container.busy) return 0;
         const footer = representation.footer?.visible ? representation.footer.height : 0;
         const body = naturalBodyHeight(representation, 0);
         const content = body > 0 ? body + footer + (representation.bottomPadding ?? 0) : Math.max(180, representation.implicitHeight);
@@ -104,7 +119,7 @@ Item {
         onTriggered: if (popup.visible) {
             if (popup.representation?.visible) {
                 const naturalHeight = popup.measureNaturalHeight();
-                if (naturalHeight > 0) popup.graphiteNaturalHeight = naturalHeight;
+                popup.rememberNaturalHeight(naturalHeight);
             }
         }
     }
@@ -113,6 +128,10 @@ Item {
         function onWidthChanged() { sizePass.restart(); }
         function onHeightChanged() { sizePass.restart(); }
         function onVisibleChanged() { sizePass.restart(); }
+    }
+    Connections {
+        target: container
+        function onBusyChanged() { if (!container.busy) sizePass.restart(); }
     }
     readonly property real desiredHeight: measureNaturalHeight()
     onDesiredHeightChanged: sizePass.restart()
