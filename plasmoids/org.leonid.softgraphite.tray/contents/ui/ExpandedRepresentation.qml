@@ -22,6 +22,48 @@ Item {
     implicitWidth: Layout.preferredWidth
     implicitHeight: Layout.preferredHeight
 
+    // The shell starts closing the dialog before its window is unmapped. Keep
+    // the last natural size of any expanded tray popup while it is closed so it
+    // does not collapse during that closing phase. Reopening immediately
+    // restores natural sizing; Back and applet switches stay unconstrained.
+    property bool closingGeometryHeld: false
+    property real lastExpandedPopupWidth: 0
+    property real lastExpandedPopupHeight: 0
+    property real closingPopupWidth: 0
+    property real closingPopupHeight: 0
+
+    function rememberExpandedPopupGeometry() {
+        if (systemTrayState.expanded) {
+            if (width > 0) lastExpandedPopupWidth = width;
+            if (height > 0) lastExpandedPopupHeight = height;
+        }
+    }
+
+    onWidthChanged: rememberExpandedPopupGeometry()
+    onHeightChanged: rememberExpandedPopupGeometry()
+
+    Connections {
+        target: systemTrayState
+
+        function onActiveAppletChanged() {
+            if (systemTrayState.activeApplet) {
+                popup.closingGeometryHeld = false;
+            }
+        }
+
+        function onExpandedChanged() {
+            if (systemTrayState.expanded) {
+                popup.closingGeometryHeld = false;
+            } else if (popup.lastExpandedPopupWidth > 0 && popup.lastExpandedPopupHeight > 0) {
+                popup.closingPopupWidth = popup.lastExpandedPopupWidth;
+                popup.closingPopupHeight = popup.lastExpandedPopupHeight;
+                popup.closingGeometryHeld = true;
+            } else {
+                popup.closingGeometryHeld = false;
+            }
+        }
+    }
+
     // Use the active scroll view's actual content, including its own header
     // and footer. Never derive the preferred size from the stretched viewport.
     readonly property Item representation: systemTrayState.activeApplet?.fullRepresentationItem ?? null
@@ -45,19 +87,25 @@ Item {
     }
     property real graphiteNaturalHeight: 210
     function measureNaturalHeight() {
-        if (!representation) return compactHeight;
+        // A StackView may expose the new item's placeholder size before the
+        // representation becomes visible. Keep the last natural size until
+        // the real page has completed its first layout pass.
+        if (!representation || !representation.visible) return 0;
         const footer = representation.footer?.visible ? representation.footer.height : 0;
         const body = naturalBodyHeight(representation, 0);
         const content = body > 0 ? body + footer + (representation.bottomPadding ?? 0) : Math.max(180, representation.implicitHeight);
         return Math.ceil(trayHeading.implicitHeight + expandedRepresentation.spacing + (container.mergeHeadings ? 0 : dialog.topPadding) + Math.max(160, content) + 12);
     }
-    // Measure after Qt's layout pass, so resizing the popup cannot recursively
-    // evaluate a ScrollBar's visibility binding. No recurring timer or polling.
+    // Coalesce the StackView's visibility and layout updates before measuring.
+    // This is a one-shot debounce, not recurring polling.
     Timer {
         id: sizePass
-        interval: 0
+        interval: 100
         onTriggered: if (popup.visible) {
-            popup.graphiteNaturalHeight = popup.measureNaturalHeight();
+            if (popup.representation?.visible) {
+                const naturalHeight = popup.measureNaturalHeight();
+                if (naturalHeight > 0) popup.graphiteNaturalHeight = naturalHeight;
+            }
         }
     }
     Connections {
@@ -89,12 +137,14 @@ Item {
         onTriggered: if (popup.visible) popup.separateTextRows(popup.representation, 0)
     }
     readonly property int fittedHeight: Math.min(Math.round(root.screenGeometry.height * 0.60), Math.max(210, graphiteNaturalHeight))
-    Layout.minimumWidth: systemTrayState.activeApplet ? 400 : 320
-    Layout.preferredWidth: Layout.minimumWidth
-    Layout.maximumWidth: Layout.minimumWidth
-    Layout.minimumHeight: systemTrayState.activeApplet ? fittedHeight : popup.compactHeight
-    Layout.preferredHeight: Layout.minimumHeight
-    Layout.maximumHeight: Layout.minimumHeight
+    readonly property real requestedPopupWidth: closingGeometryHeld ? closingPopupWidth : (systemTrayState.activeApplet ? 400 : 320)
+    readonly property real requestedPopupHeight: closingGeometryHeld ? closingPopupHeight : (systemTrayState.activeApplet ? fittedHeight : popup.compactHeight)
+    Layout.minimumWidth: requestedPopupWidth
+    Layout.preferredWidth: requestedPopupWidth
+    Layout.maximumWidth: requestedPopupWidth
+    Layout.minimumHeight: requestedPopupHeight
+    Layout.preferredHeight: requestedPopupHeight
+    Layout.maximumHeight: requestedPopupHeight
 
     readonly property int compactHeight: {
         const count = hiddenLayout?.count ?? 0;
